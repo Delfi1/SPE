@@ -1,26 +1,27 @@
 mod engine;
-use crate::engine::shaders::ObjectShader;
 
 use std::ops::Add;
 use glam::{DAffine3 as Transform, DVec3 as Vec3};
-use vulkano::buffer::BufferContents;
-use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage};
-use vulkano::format::Format;
-use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
-use vulkano::pipeline::graphics::vertex_input::{Vertex as VulkanVertex, VertexDefinition};
-use vulkano::pipeline::{GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo};
+use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, RenderPassBeginInfo};
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter};
 use vulkano::pipeline::graphics::color_blend::{ColorBlendAttachmentState, ColorBlendState};
+use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::multisample::MultisampleState;
 use vulkano::pipeline::graphics::rasterization::RasterizationState;
-use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
+use vulkano::pipeline::graphics::vertex_input::{Vertex as VulkanVertex, VertexDefinition};
+use vulkano::pipeline::graphics::viewport::ViewportState;
+use vulkano::pipeline::{GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo};
 use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
 use vulkano::render_pass::Subpass;
 use vulkano::sync::GpuFuture;
 use engine::context::*;
 use engine::event::{self, EventHandler};
+use crate::engine::config::FpsLimit;
 use crate::engine::graphics::GraphicsContext;
 use crate::engine::input::InputContext;
+use crate::engine::shaders::ObjectShader;
 use crate::engine::time::TimeContext;
 
 #[derive(BufferContents, VulkanVertex)]
@@ -52,7 +53,7 @@ pub struct Application {
 fn main() {
     let (mut ctx, event_loop) =
         ContextBuilder::new("Simple Physics Engine", "Delfi")
-            .with_vsync(true)
+            .with_fps_limit(FpsLimit::Vsync)
             .build();
 
     let app = Application::new(&mut ctx);
@@ -77,6 +78,11 @@ impl EventHandler for Application {
         let queue = _gfx.graphics_queue.clone();
         let device = queue.device();
 
+
+    }
+
+    fn char_input(&mut self, ch: char) {
+        println!("{}", ch);
     }
 
     fn on_quit(&mut self) {

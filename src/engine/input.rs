@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use winit::event::ElementState;
-use winit::keyboard::SmolStr;
 
 pub struct InputContext {
     pressed_keys: HashSet<u32>,
@@ -43,7 +42,7 @@ impl InputContext {
         self.released_keys.contains(&key)
     }
 
-    pub(crate) fn insert(&mut self, scancode: Option<u32>, state: ElementState, text: Option<SmolStr>) {
+    pub(crate) fn insert(&mut self, scancode: Option<u32>, state: ElementState) {
         if scancode.is_none() {
             return;
         }
@@ -53,7 +52,7 @@ impl InputContext {
         if state.is_pressed() {
             if !self.pressed_keys.contains(&key) {
                 self.just_pressed_keys.insert(key.clone());
-                //println!("Key {:?} has been just pressed;", key)
+                //println!("Key {:?} has been just pressed;", key);
             }
 
             self.pressed_keys.insert(key.clone());

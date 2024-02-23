@@ -1,11 +1,27 @@
 use winit::dpi::PhysicalSize;
-use winit::window::Fullscreen;
 
 #[derive(Clone)]
 pub struct WindowSetup {
     pub(crate) title: String,
     pub(crate) author: String,
     icon: String
+}
+
+#[derive(Clone, PartialEq)]
+pub enum FpsLimit {
+    Inf,
+    Set(u32),
+    Vsync
+}
+
+impl FpsLimit {
+    pub fn is_inf(&self) -> bool {
+        self == &FpsLimit::Inf
+    }
+
+    pub fn is_vsync(&self) -> bool {
+        self == &FpsLimit::Vsync
+    }
 }
 
 impl WindowSetup {
@@ -36,7 +52,7 @@ pub struct WindowMode {
     width: f32,
     height: f32,
     maximized: bool,
-    pub(crate) vsync: bool,
+    pub(crate) fps_limit: FpsLimit,
     pub(crate) borderless: bool,
     pub(crate) fullscreen: bool,
     pub(crate) resizable: bool,
@@ -65,7 +81,7 @@ impl Default for WindowMode {
             height: 720.0,
             maximized: false,
             fullscreen: false,
-            vsync: true,
+            fps_limit: FpsLimit::Vsync,
             borderless: false,
             resizable: true,
             visible: true,

@@ -1,4 +1,6 @@
 use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 use vulkano::device::physical::PhysicalDevice;
 use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, DeviceOwned, Queue, QueueCreateInfo, QueueFlags};
 use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage};
@@ -6,15 +8,16 @@ use vulkano::instance::{Instance, InstanceCreateInfo};
 use vulkano::swapchain::{acquire_next_image, PresentMode, Surface, Swapchain, SwapchainCreateInfo, SwapchainPresentInfo};
 use vulkano::sync::GpuFuture;
 use vulkano::{single_pass_renderpass, sync, Validated, VulkanError, VulkanLibrary};
-use vulkano::command_buffer::{AutoCommandBufferBuilder, ClearColorImageInfo, CommandBufferUsage, PrimaryCommandBufferAbstract, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, ClearColorImageInfo, CommandBufferUsage, PrimaryCommandBufferAbstract, RenderPassBeginInfo, SecondaryCommandBufferAbstract, SubpassBeginInfo, SubpassContents, SubpassEndInfo};
 use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
 use vulkano::format::{ClearColorValue, ClearValue, Format};
 use vulkano::image::view::ImageView;
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
-use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo};
+use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass};
 use winit::event_loop::EventLoop;
 use winit::window::{CursorGrabMode, Fullscreen, Window, WindowBuilder};
-use crate::engine::config::{Configuration, WindowMode};
+use crate::engine::config::{Configuration, FpsLimit, WindowMode};
+use crate::engine::time::TimeContext;
 
 pub struct GraphicsContext {
     pub(crate) window: Arc<Window>,
@@ -24,11 +27,13 @@ pub struct GraphicsContext {
     pub(crate) buff_alloc: Arc<StandardCommandBufferAllocator>,
     pub(crate) swapchain: Arc<Swapchain>,
     pub(crate) present_mode: PresentMode,
+    pub(crate) fps_limit: FpsLimit,
     pub(crate) main_view: Arc<ImageView>,
     pub(crate) images: Vec<Arc<Image>>,
 
     pub(crate) previous_frame_end: Option<Box<dyn GpuFuture + 'static>>,
     pub(crate) current_frame: Option<Box<dyn GpuFuture + Send + Sync + 'static>>,
+    pub(crate) render_pass: Option<Arc<RenderPass>>,
 
     pub(crate) image_index: u32,
 
@@ -119,9 +124,9 @@ impl GraphicsContext {
             .surface_formats(&surface, Default::default())
             .expect("Format not found")[0].0;
 
-        let present_mode = match conf.window_mode.vsync {
-            true => PresentMode::FifoRelaxed,
-            false => PresentMode::Mailbox
+        let present_mode = match conf.window_mode.fps_limit {
+            FpsLimit::Vsync => PresentMode::FifoRelaxed,
+            _ => PresentMode::Mailbox
         };
 
         let (swapchain, images) = Swapchain::new(
@@ -132,7 +137,7 @@ impl GraphicsContext {
                 image_format,
                 image_extent: window.inner_size().into(),
                 image_usage: ImageUsage::COLOR_ATTACHMENT,
-                // Vsync;
+                // Fps mode;
                 present_mode,
                 composite_alpha,
 
@@ -172,10 +177,13 @@ impl GraphicsContext {
             ).unwrap(),
         ).unwrap();
 
+        let fps_limit = conf.window_mode.fps_limit.clone();
+
         Self {
             window,
             surface,
             present_mode,
+            fps_limit,
             buff_alloc,
             memory_alloc,
             main_view,
@@ -184,6 +192,7 @@ impl GraphicsContext {
             image_index: 0,
             previous_frame_end,
             current_frame: None,
+            render_pass: None,
 
             swapchain,
             graphics_queue,
@@ -199,13 +208,14 @@ impl GraphicsContext {
         }
     }
 
-    pub fn set_vsync(&mut self, vsync: bool) {
-        let mode = match vsync {
-            true => PresentMode::FifoRelaxed,
-            false => PresentMode::Mailbox
+    pub fn set_fps(&mut self, fps_limit: FpsLimit) {
+        let mode = match fps_limit {
+            FpsLimit::Vsync => PresentMode::FifoRelaxed,
+            _ => PresentMode::Mailbox
         };
 
-        if self.present_mode != mode {
+        if self.fps_limit != fps_limit {
+            self.fps_limit = fps_limit;
             self.present_mode = mode;
             self.recreate_swapchain = true;
         }
@@ -341,9 +351,12 @@ impl GraphicsContext {
         Ok(future.boxed())
     }
 
+    pub fn get_render_pass(&mut self) -> Arc<RenderPass> {
+        self.render_pass.take().unwrap().clone()
+    }
+
     /// Clear current color image;
     pub(crate) fn begin_frame(&mut self) {
-        //println!("Start frame");
         let buff_alloc = self.buff_alloc.clone();
         let queue = self.graphics_queue.clone();
 
@@ -357,7 +370,6 @@ impl GraphicsContext {
             self.graphics_queue.device().clone(),
             attachments: {
                 color: {
-                    // Set the format the same as the swapchain.
                     format: self.swapchain.image_format(),
                     samples: 1,
                     load_op: Clear,
@@ -372,7 +384,7 @@ impl GraphicsContext {
 
         let view = self.swapchain_view();
         let framebuffer = Framebuffer::new(
-            clear_pass,
+            clear_pass.clone(),
             FramebufferCreateInfo {
                 attachments: vec![view],
                 ..Default::default()
@@ -398,11 +410,12 @@ impl GraphicsContext {
             .unwrap();
 
         future.wait(None).expect("Wait error");
-
+        self.render_pass = Some(clear_pass);
         self.current_frame = Some(future.boxed_send_sync());
+
     }
 
-    pub(crate) fn end_frame(&mut self) {
+    pub(crate) fn end_frame(&mut self, time_context: &TimeContext) {
         if self.current_frame.is_none() {
             panic!("Frame is none");
         }
@@ -414,6 +427,7 @@ impl GraphicsContext {
         let acquire = match self.acquire() {
             Ok(_ac) => _ac,
             Err(VulkanError::OutOfDate) => {
+                self.recreate_swapchain = true;
                 return;
             }
             Err(_e) => panic!("Acquire error")
@@ -422,12 +436,12 @@ impl GraphicsContext {
         let after_future = self.current_frame
             .take().unwrap().join(acquire).boxed();
 
-        self.present(after_future, true);
+        self.present(after_future, time_context);
         //println!("End frame");
     }
 
     #[inline]
-    pub fn present(&mut self, after_future: Box<dyn GpuFuture>, wait_future: bool) {
+    pub fn present(&mut self, after_future: Box<dyn GpuFuture>, time_context: &TimeContext) {
         let future = after_future
             .then_swapchain_present(
                 self.graphics_queue.clone(),
@@ -440,12 +454,24 @@ impl GraphicsContext {
 
         match future.map_err(Validated::unwrap) {
             Ok(mut future) => {
-                if wait_future {
-                    future.wait(None).unwrap_or_else(|e| println!("{e}"))
-                } else {
-                    future.cleanup_finished();
-                }
+                match self.fps_limit {
+                    FpsLimit::Vsync | FpsLimit::Inf => {
+                        future.wait(None).unwrap_or_else(|e| println!("{e}"));
+                    },
+                    FpsLimit::Set(value) => {
+                        let frame_time = Duration::from_secs_f64(1.0 / value as f64);
 
+                        future.wait(None).unwrap_or_else(|e| println!("{e}"));
+                        let delta = time_context.delta();
+
+                        println!("Delta: {}", delta.as_secs_f64());
+                        println!("{}", frame_time > delta);
+                        match frame_time > delta {
+                            true => thread::sleep(frame_time - delta),
+                            false => ()
+                        };
+                    }
+                }
                 self.previous_frame_end = Some(future.boxed());
             }
             Err(VulkanError::OutOfDate) => {

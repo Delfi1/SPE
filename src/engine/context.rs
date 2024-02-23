@@ -61,8 +61,8 @@ impl ContextBuilder {
         self
     }
 
-    pub fn with_vsync(mut self, vsync: bool) -> Self {
-        self.conf.window_mode.vsync = vsync;
+    pub fn with_fps_limit(mut self, fps_limit: FpsLimit) -> Self {
+        self.conf.window_mode.fps_limit = fps_limit;
         self
     }
 
