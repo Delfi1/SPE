@@ -1,22 +1,20 @@
-use vulkano::sync::GpuFuture;
 use winit::dpi::PhysicalSize;
-use winit::event_loop;
 use winit::event_loop::EventLoop;
 use super::graphics::*;
 use crate::engine::config::*;
 use crate::engine::input::InputContext;
 use crate::engine::time::TimeContext;
 
-pub(crate) struct Context {
-    pub(crate) conf: Configuration,
-    pub(crate) gfx: GraphicsContext,
-    pub(crate) time: TimeContext,
-    pub(crate) input: InputContext,
-    pub(crate) is_running: bool
+pub struct Context {
+    pub(super) conf: Configuration,
+    pub gfx: GraphicsContext,
+    pub time: TimeContext,
+    pub input: InputContext,
+    pub(super) is_running: bool
 }
 
 impl Context {
-    pub(crate) fn new(conf: Configuration, event_loop: &EventLoop<()>) -> Self {
+    pub(super) fn new(conf: Configuration, event_loop: &EventLoop<()>) -> Self {
 
         let gfx = GraphicsContext::new(&conf, event_loop);
         let time = TimeContext::new();

@@ -10,7 +10,7 @@ pub struct TimeContext {
 const MAX_DELTA_COUNT: usize = 200;
 
 impl TimeContext {
-    pub(crate) fn new() -> Self {
+    pub(super) fn new() -> Self {
         let init_instant = Instant::now();
         let last_instant = init_instant.clone();
         let frame_count = 0;
@@ -18,6 +18,10 @@ impl TimeContext {
         let frame_durations = Vec::from([Duration::from_millis(1)]);
 
         Self { init_instant, last_instant, frame_durations, frame_count }
+    }
+
+    pub(super) fn raw_delta(&self) -> Duration {
+        Instant::now().duration_since(self.last_instant)
     }
 
     pub fn delta(&self) -> Duration {
@@ -50,7 +54,7 @@ impl TimeContext {
         self.frame_count
     }
 
-    pub(crate) fn tick(&mut self) {
+    pub(super) fn tick(&mut self) {
         let now = Instant::now();
         let time_since_last = now - self.last_instant;
         self.frame_durations.push(time_since_last);

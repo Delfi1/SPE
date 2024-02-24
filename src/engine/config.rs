@@ -1,9 +1,9 @@
 use winit::dpi::PhysicalSize;
 
 #[derive(Clone)]
-pub struct WindowSetup {
-    pub(crate) title: String,
-    pub(crate) author: String,
+pub(super) struct WindowSetup {
+    pub(super) title: String,
+    pub(super) author: String,
     icon: String
 }
 
@@ -48,16 +48,16 @@ impl Default for WindowSetup {
 }
 
 #[derive(Clone)]
-pub struct WindowMode {
+pub(super) struct WindowMode {
     width: f32,
     height: f32,
     maximized: bool,
-    pub(crate) fps_limit: FpsLimit,
-    pub(crate) borderless: bool,
-    pub(crate) fullscreen: bool,
-    pub(crate) resizable: bool,
-    pub(crate) visible: bool,
-    pub(crate) transparent: bool
+    pub(super) fps_limit: FpsLimit,
+    pub(super) borderless: bool,
+    pub(super) fullscreen: bool,
+    pub(super) resizable: bool,
+    pub(super) visible: bool,
+    pub(super) transparent: bool
 }
 
 impl WindowMode {
@@ -69,7 +69,7 @@ impl WindowMode {
         }
     }
 
-    pub(crate) fn actual_size(&self) -> PhysicalSize<f32> {
+    pub(super) fn actual_size(&self) -> PhysicalSize<f32> {
         PhysicalSize::new(self.width, self.height)
     }
 }
@@ -91,13 +91,13 @@ impl Default for WindowMode {
 }
 
 #[derive(Clone)]
-pub struct Configuration {
-    pub(crate) window_setup: WindowSetup,
-    pub(crate) window_mode: WindowMode
+pub(super) struct Configuration {
+    pub(super) window_setup: WindowSetup,
+    pub(super) window_mode: WindowMode
 }
 
 impl Configuration {
-    pub(crate) fn new(title: &str, author: &str) -> Self {
+    pub(super) fn new(title: &str, author: &str) -> Self {
         let window_setup = WindowSetup::new(title, author);
         let window_mode = WindowMode::default();
 
@@ -107,7 +107,7 @@ impl Configuration {
         }
     }
 
-    pub(crate) fn set_size(&mut self, size: PhysicalSize<f32>) {
+    pub(super) fn set_size(&mut self, size: PhysicalSize<f32>) {
         self.window_mode.width = size.width;
         self.window_mode.height = size.height;
     }

@@ -3,10 +3,10 @@
     windows_subsystem = "windows"
 )]
 
-pub(crate) mod config;
-pub(crate) mod context;
-pub(crate) mod event;
-pub(crate) mod graphics;
-pub(crate) mod input;
-pub(crate) mod time;
-pub(crate) mod shaders;
+pub mod config;
+pub mod context;
+pub mod event;
+pub mod graphics;
+pub mod input;
+pub mod time;
+pub mod updater;

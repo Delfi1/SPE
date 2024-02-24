@@ -1,6 +1,6 @@
 [package]
 name = "SPE"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 
 [profile.dev]
@@ -8,6 +8,9 @@ opt-level = 3
 
 [dependencies]
 vulkano = "*"
-vulkano-shaders = "0.34.0"
+vulkano-shaders = "*"
 winit = { version = "*", features = ["default", "rwh_05"] }
 glam = "*"
+self_update = {version = "*", features = ["default", "archive-tar"]}
+tempfile = "*"
+reqwest = "*"

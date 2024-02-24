@@ -3,7 +3,6 @@ use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::platform::scancode::PhysicalKeyExtScancode;
 use winit::window::Fullscreen;
-use crate::engine::config::FpsLimit;
 use crate::engine::graphics::GraphicsContext;
 use crate::engine::input::InputContext;
 use crate::engine::time::TimeContext;
@@ -37,7 +36,7 @@ pub fn run<S: EventHandler + 'static>(event_loop: EventLoop<()>, mut context: Co
                     ticks
                 ).leak();
 
-            ctx.gfx.window.set_title(title);
+            ctx.gfx.window().set_title(title);
         }
 
         process_event(&event, ctx, handler);
@@ -51,10 +50,6 @@ pub fn run<S: EventHandler + 'static>(event_loop: EventLoop<()>, mut context: Co
 
                 match_input(ctx);
                 handler.update(&ctx.time, &ctx.input);
-
-                ctx.gfx.begin_frame();
-                handler.draw(&mut ctx.gfx);
-                ctx.gfx.end_frame(&ctx.time);
 
                 ctx.input.update();
             }
@@ -84,11 +79,7 @@ fn match_input(ctx: &mut Context) {
     }
 
     if ctx.input.is_key_pressed(29) && ctx.input.is_key_just_pressed(47) {
-        if ctx.gfx.fps_limit.is_vsync() {
-            ctx.gfx.set_fps(FpsLimit::Inf);
-        } else {
-            ctx.gfx.set_fps(FpsLimit::Vsync);
-        }
+        //Todo: Vsync switch
     }
 
     let exit_keys = HashSet::from([1, 42]);
@@ -135,6 +126,6 @@ fn process_event<S: EventHandler + 'static>(event: &Event<()>, ctx: &mut Context
 pub trait EventHandler {
     fn update(&mut self, _time: &TimeContext, _input: &InputContext);
     fn draw(&mut self, _gfx: &mut GraphicsContext);
-    fn char_input(&mut self, ch: char) { /* Empty */ }
+    fn char_input(&mut self, _ch: char) { /* Empty */ }
     fn on_quit(&mut self) { /* Empty */ }
 }
