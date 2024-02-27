@@ -7,10 +7,9 @@ pub(super) struct WindowSetup {
     icon: String
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum FpsLimit {
     Inf,
-    Set(u32),
     Vsync
 }
 
@@ -53,6 +52,7 @@ pub(super) struct WindowMode {
     height: f32,
     maximized: bool,
     pub(super) fps_limit: FpsLimit,
+    pub(super) min_size: PhysicalSize<f32>,
     pub(super) borderless: bool,
     pub(super) fullscreen: bool,
     pub(super) resizable: bool,
@@ -81,6 +81,7 @@ impl Default for WindowMode {
             height: 720.0,
             maximized: false,
             fullscreen: false,
+            min_size: PhysicalSize::new(640.0, 360.0),
             fps_limit: FpsLimit::Vsync,
             borderless: false,
             resizable: true,
@@ -110,5 +111,9 @@ impl Configuration {
     pub(super) fn set_size(&mut self, size: PhysicalSize<f32>) {
         self.window_mode.width = size.width;
         self.window_mode.height = size.height;
+    }
+
+    pub(super) fn set_min_size(&mut self, size: PhysicalSize<f32>) {
+        self.window_mode.min_size = size;
     }
 }

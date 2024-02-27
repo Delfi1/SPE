@@ -1,4 +1,5 @@
 mod engine;
+mod updater;
 
 use engine::config::FpsLimit;
 use engine::context::{Context, ContextBuilder};
@@ -7,18 +8,17 @@ use engine::event::EventHandler;
 use engine::graphics::GraphicsContext;
 use engine::input::InputContext;
 use engine::time::TimeContext;
-use engine::updater::update;
-use crate::engine::updater::check_updates;
+use glam::{DAffine3 as Transform, DVec3};
+use crate::engine::graphics::meshes::{CUBE_VERTICES, Mesh, Object};
 
 pub struct Application {
-
+    objects: Vec<Object>
 }
 
 fn main() {
     let (mut ctx, event_loop) =
         ContextBuilder::new("Simple Physics Engine", "Delfi")
             .with_fps_limit(FpsLimit::Vsync)
-            .with_visible(false)
             .build();
 
     let app = Application::new(&mut ctx);
@@ -28,21 +28,22 @@ fn main() {
 
 impl Application {
     pub fn new(_ctx: &mut Context) -> Self {
-        let raw_releases = check_updates();
-        if raw_releases.is_ok() {
-            let releases = raw_releases.unwrap();
+        let mut objects = Vec::new();
 
-            update(releases).expect("Update error");
-        } else {
-            println!("Not new versions was found")
+        let cube_mesh = Mesh::load(CUBE_VERTICES.to_vec());
+        let cube = Object::new(cube_mesh, DVec3::ZERO);
+
+        objects.push(cube);
+
+        Self {
+            objects
         }
-        _ctx.gfx.window().set_visible(true);
-        Self {}
     }
 }
 
 impl EventHandler for Application {
     fn update(&mut self, _time: &TimeContext, _input: &InputContext) {
+
 
     }
 
