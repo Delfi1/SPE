@@ -15,10 +15,9 @@ pub struct Context {
 
 impl Context {
     pub(super) fn new(conf: Configuration, event_loop: &EventLoop<()>) -> Self {
-
-        let gfx = GraphicsContext::new(&conf, event_loop);
         let time = TimeContext::new();
         let input = InputContext::new();
+        let gfx = GraphicsContext::new(&conf, event_loop);
 
         Self {
             conf,
@@ -42,6 +41,11 @@ impl ContextBuilder {
         Self {
             conf
         }
+    }
+
+    pub fn with_min_size(mut self, size: PhysicalSize<f32>) -> Self {
+        self.conf.set_min_size(size);
+        self
     }
 
     pub fn with_size(mut self, size: PhysicalSize<f32>) -> Self {

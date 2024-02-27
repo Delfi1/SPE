@@ -20,44 +20,29 @@ pub fn run<S: EventHandler + 'static>(event_loop: EventLoop<()>, mut context: Co
         }
 
         #[cfg(debug_assertions)]
-        {
-            let win_title = &ctx.conf.window_setup.title;
-            let author = &ctx.conf.window_setup.author;
-
-            let average_fps = ctx.time.average_fps().clamp(0.0, 999.0) as u64;
-            let ticks = ctx.time.ticks();
-
-            let title =
-                format!(
-                    "{} by [{}]; Fps: {} |{}|",
-                    win_title,
-                    author,
-                    average_fps,
-                    ticks
-                ).leak();
-
-            ctx.gfx.window().set_title(title);
-        }
-
+        update_title(ctx);
         process_event(&event, ctx, handler);
-        match event {
-            Event::LoopExiting => {
-                handler.on_quit();
-            },
-
-            Event::AboutToWait => {
-                ctx.time.tick();
-
-                match_input(ctx);
-                handler.update(&ctx.time, &ctx.input);
-
-                ctx.input.update();
-            }
-
-            _ => ()
-        }
 
     }).expect("Event Loop error");
+}
+
+fn update_title(ctx: &Context) {
+    let win_title = &ctx.conf.window_setup.title;
+    let author = &ctx.conf.window_setup.author;
+
+    let average_fps = ctx.time.average_fps().clamp(0.0, 999.0) as u64;
+    let ticks = ctx.time.ticks();
+
+    let title =
+        format!(
+            "{} by [{}]; Fps: {} |{}|",
+            win_title,
+            author,
+            average_fps,
+            ticks
+        ).leak();
+
+    ctx.gfx.window().set_title(title);
 }
 
 fn match_input(ctx: &mut Context) {
@@ -90,6 +75,7 @@ fn match_input(ctx: &mut Context) {
 }
 
 fn process_event<S: EventHandler + 'static>(event: &Event<()>, ctx: &mut Context, handler: &mut S) {
+    /// Match window events
     if let Event::WindowEvent { event, .. } = event {
         match event {
             WindowEvent::CloseRequested => {
@@ -118,8 +104,40 @@ fn process_event<S: EventHandler + 'static>(event: &Event<()>, ctx: &mut Context
                 ctx.input.insert(scancode, state);
             },
 
+            WindowEvent::DroppedFile(_buf) => {
+                // When file drops
+                println!("file dropped!");
+                ctx.gfx.window().request_redraw();
+            },
+
+            WindowEvent::HoveredFile(_buf) => {
+                println!("file hovered!");
+            },
+
+            WindowEvent::RedrawRequested => {
+                // Update main states;
+                ctx.time.tick();
+                match_input(ctx);
+                handler.update(&ctx.time, &ctx.input);
+                ctx.input.update();
+
+                // Draw frame;
+                ctx.gfx.begin_frame();
+                handler.draw(&mut ctx.gfx);
+                ctx.gfx.end_frame();
+            },
+
             _ => ()
         }
+    }
+
+    /// Match loop events;
+    match event {
+        Event::LoopExiting => {
+            handler.on_quit();
+        },
+
+        _ => ()
     }
 }
 

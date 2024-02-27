@@ -1,24 +1,58 @@
 use std::sync::Arc;
-use vulkano::swapchain::{Surface, Swapchain, SwapchainCreateInfo};
-use vulkano::{Validated, VulkanError, VulkanLibrary};
+use vulkano::swapchain::{acquire_next_image, PresentMode, Surface, Swapchain, SwapchainCreateInfo, SwapchainPresentInfo};
+use vulkano::{single_pass_renderpass, sync, Validated, VulkanError, VulkanLibrary};
+use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryCommandBufferAbstract, RenderPassBeginInfo, SubpassBeginInfo, SubpassEndInfo};
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags};
+use vulkano::format::{ClearValue, Format};
 use vulkano::image::{Image, ImageUsage};
+use vulkano::image::view::ImageView;
 use vulkano::instance::{Instance, InstanceCreateInfo};
+use vulkano::memory::allocator::StandardMemoryAllocator;
+use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, RenderPassCreateInfo};
+use vulkano::sync::GpuFuture;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
-use crate::engine::config::Configuration;
+use crate::engine::config::{Configuration, FpsLimit};
+
+pub mod meshes;
+
+pub struct Allocators {
+    memory: Arc<StandardMemoryAllocator>,
+    buffer: Arc<StandardCommandBufferAllocator>
+}
+
+impl Allocators {
+    fn new(device: Arc<Device>) -> Arc<Self> {
+        let memory = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
+        let buffer = Arc::new(StandardCommandBufferAllocator::new(
+            device.clone(),
+            StandardCommandBufferAllocatorCreateInfo::default()
+        ));
+
+        Arc::new(Self {memory, buffer})
+    }
+}
 
 #[derive()]
 pub struct Renderer {
     queue: Arc<Queue>,
+    allocators: Arc<Allocators>,
+
+    window: Arc<Window>,
     surface: Arc<Surface>,
+    present_mode: PresentMode,
     swapchain: Arc<Swapchain>,
-    images: Vec<Arc<Image>>
+    images: Vec<Arc<Image>>,
+    image_index: u32,
+    previous_frame_end: Option<Box<dyn GpuFuture + 'static>>,
+
+    outdated: bool
 }
 
 impl Renderer {
-    pub(self) fn new(window: Arc<Window>, event_loop: &EventLoop<()>) -> Result<Arc<Self>, Validated<VulkanError>> {
+    pub(self) fn new(present_mode: PresentMode, window: Arc<Window>, event_loop: &EventLoop<()>) -> Result<Self, Validated<VulkanError>> {
         let library = VulkanLibrary::new().unwrap();
 
         let required_extensions = Surface::required_extensions(event_loop);
@@ -71,13 +105,23 @@ impl Renderer {
             }
         ).unwrap();
 
-        Ok(
-            Arc::new(Self {
+        let allocators = Allocators::new(device.clone());
+        let previous_frame_end = Some(sync::now(device.clone()).boxed());
+
+        Ok(Self {
                 queue,
+                allocators,
+
+                window,
+                present_mode,
                 surface,
                 swapchain,
-                images
-            })
+                images,
+                image_index: 0,
+                previous_frame_end,
+
+                outdated: false
+            }
         )
     }
 
@@ -141,11 +185,91 @@ impl Renderer {
         queues.next().expect("queue not found")
     }
 
+    fn recreate_swapchain_and_views(&mut self) {
+        let image_extent: [u32; 2] = self.window.inner_size().into();
+
+        if image_extent.contains(&0) {
+            return;
+        }
+
+        let (new_swapchain, new_images) = self
+            .swapchain
+            .recreate(SwapchainCreateInfo {
+                image_extent,
+                present_mode: self.present_mode,
+                ..self.swapchain.create_info()
+            })
+            .expect("failed to recreate swapchain");
+
+        self.swapchain = new_swapchain;
+        self.images = new_images;
+
+        self.outdated = false;
+    }
+
+    pub(crate) fn acquire(&mut self) -> Result<Box<dyn GpuFuture>, VulkanError> {
+        if self.outdated {
+            self.recreate_swapchain_and_views();
+        }
+
+        let (image_index, suboptimal, acquire_future) =
+            match acquire_next_image(self.swapchain.clone(), None)
+                .map_err(Validated::unwrap)
+            {
+                Ok(r) => r,
+                Err(VulkanError::OutOfDate) => {
+                    self.outdated = true;
+                    return Err(VulkanError::OutOfDate);
+                }
+                Err(e) => panic!("failed to acquire next image: {e}"),
+            };
+
+        if suboptimal {
+            self.outdated = true;
+        }
+
+        self.image_index = image_index;
+        let future = self.previous_frame_end
+            .take().unwrap().join(acquire_future);
+
+        Ok(future.boxed())
+    }
+
+    fn present(&mut self, after_future: Box<dyn GpuFuture + 'static>) {
+        let future = after_future
+            .then_swapchain_present(
+                self.queue.clone(),
+                SwapchainPresentInfo::swapchain_image_index(
+                    self.swapchain.clone(),
+                    self.image_index,
+                ),
+            )
+            .then_signal_fence_and_flush();
+        match future.map_err(Validated::unwrap) {
+            Ok(mut future) => {
+                future.wait(None).unwrap_or_else(|e| println!("{e}"));
+                self.previous_frame_end = Some(future.boxed());
+            }
+            Err(VulkanError::OutOfDate) => {
+                self.outdated = true;
+                self.previous_frame_end =
+                    Some(sync::now(self.queue.device().clone()).boxed());
+            }
+            Err(e) => {
+                println!("failed to flush future: {e}");
+                self.previous_frame_end =
+                    Some(sync::now(self.queue.device().clone()).boxed());
+            }
+        }
+    }
+
     pub(self) fn create_window(conf: &Configuration, event_loop: &EventLoop<()>) -> Arc<Window> {
         #[cfg(target_os = "windows")]
             let mut window_builder = {
             use winit::platform::windows::WindowBuilderExtWindows;
-            WindowBuilder::new().with_drag_and_drop(false)
+            WindowBuilder::new()
+                //.with_menu()
+                .with_drag_and_drop(false)
         };
 
         #[cfg(not(target_os = "windows"))]
@@ -154,9 +278,10 @@ impl Renderer {
         let window_builder = window_builder
             .with_title(conf.window_setup.title.clone())
             .with_resizable(conf.window_mode.resizable)
-            .with_visible(conf.window_mode.visible)
+            .with_visible(false)
             .with_transparent(conf.window_mode.transparent)
-            .with_inner_size(conf.window_mode.actual_size());
+            .with_inner_size(conf.window_mode.actual_size())
+            .with_min_inner_size(conf.window_mode.min_size);
 
         let window = Arc::new(
             window_builder
@@ -169,18 +294,29 @@ impl Renderer {
 
 pub struct GraphicsContext {
     window: Arc<Window>,
-    renderer: Arc<Renderer>
+    renderer: Renderer,
+    fps_limit: FpsLimit,
+    current_frame: Option<Box<dyn GpuFuture + 'static>>
 }
 
 impl GraphicsContext {
     pub(super) fn new(conf: &Configuration, event_loop: &EventLoop<()>) -> Self {
         let window = Renderer::create_window(conf, event_loop);
 
-        let renderer = Renderer::new(window.clone(), event_loop).unwrap();
+        let present_mode = match conf.window_mode.fps_limit {
+            FpsLimit::Vsync => PresentMode::FifoRelaxed,
+            _ => PresentMode::Mailbox
+        };
 
+        let renderer = Renderer::new(present_mode, window.clone(), event_loop).unwrap();
+
+        window.set_visible(conf.window_mode.visible);
+        window.request_redraw();
         GraphicsContext {
             window,
-            renderer
+            renderer,
+            current_frame: None,
+            fps_limit: conf.window_mode.fps_limit
         }
     }
 
@@ -188,7 +324,103 @@ impl GraphicsContext {
         &self.window
     }
 
-    pub(super) fn resize(&self) {
-        //Todo
+    pub fn swapchain_image(&self) -> Arc<Image> {
+        self.renderer.images[self.renderer.image_index as usize].clone()
+    }
+
+    pub fn swapchain_format(&self) -> Format {
+        self.renderer.swapchain.image_format()
+    }
+
+    pub fn set_fps_limit(&mut self, fps_limit: FpsLimit) {
+        if self.fps_limit != fps_limit {
+            self.fps_limit = fps_limit;
+            self.renderer.outdated = true;
+            self.renderer.present_mode = match fps_limit {
+                FpsLimit::Vsync => PresentMode::FifoRelaxed,
+                _ => PresentMode::Mailbox
+            };
+        }
+    }
+
+    pub(super) fn begin_frame(&mut self) {
+        let queue = self.renderer.queue.clone();
+        let device = queue.device();
+        let allocators = self.renderer.allocators.clone();
+        let buffer = allocators.buffer.clone();
+
+        let clear_pass = single_pass_renderpass!(
+            device.clone(),
+            attachments: {
+                color: {
+                format: self.swapchain_format(),
+                samples: 1,
+                load_op: Clear,
+                store_op: Store,
+                },
+            },
+            pass: { color: [color],
+                depth_stencil: {},
+            },
+        ).unwrap();
+
+        let image = self.swapchain_image();
+        let view = ImageView::new_default(image.clone()).unwrap();
+        let framebuffer = Framebuffer::new(
+            clear_pass.clone(),
+            FramebufferCreateInfo {
+                attachments: vec![view],
+                ..Default::default()
+            },
+        ).unwrap();
+
+        let mut builder = AutoCommandBufferBuilder::primary(
+            &buffer,
+            queue.queue_family_index(),
+            CommandBufferUsage::MultipleSubmit
+        ).unwrap();
+
+        builder
+            .begin_render_pass(
+                RenderPassBeginInfo {
+                    clear_values: vec![Some([0.2, 0.2, 0.2, 1.0].into())],
+                    ..RenderPassBeginInfo::framebuffer(framebuffer.clone())
+                },
+                SubpassBeginInfo::default()
+            ).unwrap()
+            .end_render_pass(
+                SubpassEndInfo::default()
+            ).unwrap();
+
+        let future = builder.build().unwrap()
+            .execute(self.renderer.queue.clone())
+            .unwrap()
+            .then_signal_fence_and_flush()
+            .unwrap();
+
+        future.wait(None).expect("Wait error");
+
+        self.current_frame = Some(future.boxed());
+    }
+
+    pub(super) fn end_frame(&mut self) {
+        let acquire = match self.renderer.acquire() {
+            Ok(ac) => ac,
+            Err(VulkanError::OutOfDate) => {
+                self.window.request_redraw();
+                return;
+            }
+            Err(_e) => panic!("Acquire error")
+        };
+
+        let future = self.current_frame
+            .take().unwrap().join(acquire).boxed();
+
+        self.renderer.present(future);
+        self.window.request_redraw()
+    }
+
+    pub(super) fn resize(&mut self) {
+        self.renderer.outdated = true;
     }
 }

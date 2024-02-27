@@ -7,7 +7,7 @@ pub struct TimeContext {
     frame_count: usize,
 }
 
-const MAX_DELTA_COUNT: usize = 200;
+const MAX_DELTA_COUNT: usize = 50;
 
 impl TimeContext {
     pub(super) fn new() -> Self {
