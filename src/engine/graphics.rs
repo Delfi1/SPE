@@ -336,6 +336,10 @@ impl GraphicsContext {
         self.renderer.acquire()
     }
 
+    pub fn fps_limit(&mut self) -> FpsLimit {
+        self.fps_limit
+    }
+
     pub fn set_fps_limit(&mut self, fps_limit: FpsLimit) {
         if self.fps_limit != fps_limit {
             self.fps_limit = fps_limit;

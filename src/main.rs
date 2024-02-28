@@ -1,3 +1,8 @@
+#![cfg_attr(
+    not(debug_assertions),
+    windows_subsystem = "windows"
+)]
+
 mod engine;
 mod updater;
 
@@ -9,8 +14,8 @@ use engine::graphics::GraphicsContext;
 use engine::input::InputContext;
 use engine::time::TimeContext;
 use glam::{DAffine3 as Transform, DVec3};
-use winit::window::ResizeDirection;
-use crate::engine::graphics::meshes::{CUBE_VERTICES, Mesh, Object};
+use winit::keyboard::SmolStr;
+use engine::graphics::meshes::{CUBE_VERTICES, Mesh, Object};
 
 pub struct Application {
     objects: Vec<Object>
@@ -45,15 +50,19 @@ impl Application {
 impl EventHandler for Application {
     fn update(&mut self, _time: &TimeContext, _input: &InputContext) {
 
-
     }
 
     fn draw(&mut self, _gfx: &mut GraphicsContext) {
 
     }
 
-    fn char_input(&mut self, ch: char) {
-        println!("{}", ch);
+    fn button_pressed(&mut self, _btn: u32, _ch: Option<SmolStr>) {
+        println!("Button \"{}\" id: {} was pressed;", _ch.unwrap_or(SmolStr::new("None")), _btn);
+
+    }
+
+    fn button_released(&mut self, _btn: u32) {
+        println!("Button {} was released;", _btn);
     }
 
     fn on_quit(&mut self) {
