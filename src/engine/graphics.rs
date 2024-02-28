@@ -332,6 +332,10 @@ impl GraphicsContext {
         self.renderer.swapchain.image_format()
     }
 
+    pub fn acquire(&mut self) -> Result<Box<dyn GpuFuture>, VulkanError> {
+        self.renderer.acquire()
+    }
+
     pub fn set_fps_limit(&mut self, fps_limit: FpsLimit) {
         if self.fps_limit != fps_limit {
             self.fps_limit = fps_limit;
@@ -403,16 +407,7 @@ impl GraphicsContext {
         self.current_frame = Some(future.boxed());
     }
 
-    pub(super) fn end_frame(&mut self) {
-        let acquire = match self.renderer.acquire() {
-            Ok(ac) => ac,
-            Err(VulkanError::OutOfDate) => {
-                self.window.request_redraw();
-                return;
-            }
-            Err(_e) => panic!("Acquire error")
-        };
-
+    pub(super) fn end_frame(&mut self, acquire: Box<dyn GpuFuture + 'static>) {
         let future = self.current_frame
             .take().unwrap().join(acquire).boxed();
 
