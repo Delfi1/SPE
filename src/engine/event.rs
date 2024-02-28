@@ -1,9 +1,11 @@
 use std::collections::HashSet;
 use vulkano::VulkanError;
-use winit::event::{Event, WindowEvent};
+use winit::event::{ElementState, Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
+use winit::keyboard::SmolStr;
 use winit::platform::scancode::PhysicalKeyExtScancode;
 use winit::window::Fullscreen;
+use crate::engine::config::FpsLimit;
 use crate::engine::graphics::GraphicsContext;
 use crate::engine::input::InputContext;
 use crate::engine::time::TimeContext;
@@ -20,7 +22,7 @@ pub fn run<S: EventHandler + 'static>(event_loop: EventLoop<()>, mut context: Co
             target.exit()
         }
 
-        #[cfg(debug_assertions)]
+        //#[cfg(debug_assertions)]
         update_title(ctx);
         process_event(&event, ctx, handler);
 
@@ -32,15 +34,13 @@ fn update_title(ctx: &Context) {
     let author = &ctx.conf.window_setup.author;
 
     let average_fps = ctx.time.average_fps().clamp(0.0, 999.0) as u64;
-    let ticks = ctx.time.ticks();
 
     let title =
         format!(
-            "{} by [{}]; Fps: {} |{}|",
+            "{} by [{}]; Fps: {}",
             win_title,
             author,
-            average_fps,
-            ticks
+            average_fps
         ).leak();
 
     ctx.gfx.window().set_title(title);
@@ -65,7 +65,12 @@ fn match_input(ctx: &mut Context) {
     }
 
     if ctx.input.is_key_pressed(29) && ctx.input.is_key_just_pressed(47) {
-        //Todo: Vsync switch
+        let fps_limit = match ctx.gfx.fps_limit() {
+            FpsLimit::Inf => FpsLimit::Vsync,
+            _ => FpsLimit::Inf
+        };
+
+        ctx.gfx.set_fps_limit(fps_limit);
     }
 
     let exit_keys = HashSet::from([1, 42]);
@@ -100,6 +105,15 @@ fn process_event<S: EventHandler + 'static>(event: &Event<()>, ctx: &mut Context
 
                     let input_char = chars.next().unwrap();
                     handler.char_input(input_char);
+                }
+
+                if scancode.is_some() {
+                    let code = scancode.unwrap();
+                    let text = event.text.clone();
+                    match state {
+                        ElementState::Pressed => handler.button_pressed(code, text),
+                        ElementState::Released => handler.button_released(code)
+                    };
                 }
 
                 ctx.input.insert(scancode, state);
@@ -154,5 +168,12 @@ pub trait EventHandler {
     fn update(&mut self, _time: &TimeContext, _input: &InputContext);
     fn draw(&mut self, _gfx: &mut GraphicsContext);
     fn char_input(&mut self, _ch: char) { /* Empty */ }
+
+    /// Then button was pressed;
+    fn button_pressed(&mut self, _btn: u32, _ch: Option<SmolStr>) { /* Empty */ }
+
+    /// Then button was released;
+    fn button_released(&mut self, _btn: u32) { /* Empty */ }
+
     fn on_quit(&mut self) { /* Empty */ }
 }
