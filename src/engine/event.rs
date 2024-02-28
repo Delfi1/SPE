@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use vulkano::VulkanError;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::platform::scancode::PhysicalKeyExtScancode;
@@ -122,9 +123,17 @@ fn process_event<S: EventHandler + 'static>(event: &Event<()>, ctx: &mut Context
                 ctx.input.update();
 
                 // Draw frame;
+                let acquire = match ctx.gfx.acquire() {
+                    Ok(ac) => ac,
+                    Err(VulkanError::OutOfDate) => {
+                        ctx.gfx.window().request_redraw();
+                        return;
+                    }
+                    Err(_e) => panic!("Acquire error")
+                };
                 ctx.gfx.begin_frame();
                 handler.draw(&mut ctx.gfx);
-                ctx.gfx.end_frame();
+                ctx.gfx.end_frame(acquire);
             },
 
             _ => ()
