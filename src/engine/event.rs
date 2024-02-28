@@ -22,7 +22,7 @@ pub fn run<S: EventHandler + 'static>(event_loop: EventLoop<()>, mut context: Co
             target.exit()
         }
 
-        #[cfg(debug_assertions)]
+        //#[cfg(debug_assertions)]
         update_title(ctx);
         process_event(&event, ctx, handler);
 
@@ -34,15 +34,13 @@ fn update_title(ctx: &Context) {
     let author = &ctx.conf.window_setup.author;
 
     let average_fps = ctx.time.average_fps().clamp(0.0, 999.0) as u64;
-    let ticks = ctx.time.ticks();
 
     let title =
         format!(
-            "{} by [{}]; Fps: {} |{}|",
+            "{} by [{}]; Fps: {}",
             win_title,
             author,
-            average_fps,
-            ticks
+            average_fps
         ).leak();
 
     ctx.gfx.window().set_title(title);

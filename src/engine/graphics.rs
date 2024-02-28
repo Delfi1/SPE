@@ -391,7 +391,7 @@ impl GraphicsContext {
         builder
             .begin_render_pass(
                 RenderPassBeginInfo {
-                    clear_values: vec![Some([0.2, 0.2, 0.2, 1.0].into())],
+                    clear_values: vec![Some(ClearValue::Float([22.0/255.0, 22.0/255.0, 29.0/255.0, 1.0]))],
                     ..RenderPassBeginInfo::framebuffer(framebuffer.clone())
                 },
                 SubpassBeginInfo::default()
