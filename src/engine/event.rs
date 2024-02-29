@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use vulkano::sync::GpuFuture;
 use vulkano::VulkanError;
 use winit::event::{ElementState, Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -11,22 +12,45 @@ use crate::engine::input::InputContext;
 use crate::engine::time::TimeContext;
 use super::context::*;
 
-pub fn run<S: EventHandler + 'static>(event_loop: EventLoop<()>, mut context: Context, mut app: S) {
-    event_loop.set_control_flow(ControlFlow::Poll);
+pub struct EventWorker<Handler>
+where
+    Handler: EventHandler + Sized + 'static
+{
+    app: Handler,
+    context: Context,
+}
 
-    event_loop.run( move |event, target| {
-        let ctx = &mut context;
-        let handler = &mut app;
+impl<Handler> EventWorker<Handler>
+where
+    Handler: EventHandler + 'static {
 
-        if !ctx.is_running {
-            target.exit()
+    pub fn new(mut context: Context) -> Self {
+        let mut app = Handler::create(&mut context);
+
+        Self {
+            app,
+            context
         }
+    }
 
-        //#[cfg(debug_assertions)]
-        update_title(ctx);
-        process_event(&event, ctx, handler);
+    pub fn run(&mut self, event_loop: EventLoop<()>) {
+        event_loop.set_control_flow(ControlFlow::Poll);
 
-    }).expect("Event Loop error");
+        event_loop.run( move |event, target| {
+            let ctx = &mut self.context;
+            let handler = &mut self.app;
+
+            if !ctx.is_running {
+                target.exit()
+            }
+
+            ctx.gfx.window().set_cursor_visible(!ctx.gfx.window().has_focus());
+
+            update_title(ctx);
+            process_event(&event, ctx, handler);
+
+        }).expect("Event Loop error");
+    }
 }
 
 fn update_title(ctx: &Context) {
@@ -130,24 +154,26 @@ fn process_event<S: EventHandler + 'static>(event: &Event<()>, ctx: &mut Context
             },
 
             WindowEvent::RedrawRequested => {
+                // Create current image acquire;
+                let acquire = match ctx.gfx.acquire() {
+                    Ok(ac) => ac,
+                    Err(VulkanError::OutOfDate) => {
+                        // If acquire is out of date -> redraw;
+                        ctx.gfx.window().request_redraw();
+                        return;
+                    }
+                    Err(_e) => panic!("Acquire error")
+                };
+
                 // Update main states;
                 ctx.time.tick();
                 match_input(ctx);
                 handler.update(&ctx.time, &ctx.input);
                 ctx.input.update();
 
-                // Draw frame;
-                let acquire = match ctx.gfx.acquire() {
-                    Ok(ac) => ac,
-                    Err(VulkanError::OutOfDate) => {
-                        ctx.gfx.window().request_redraw();
-                        return;
-                    }
-                    Err(_e) => panic!("Acquire error")
-                };
-                ctx.gfx.begin_frame();
+                let future = ctx.gfx.clear_frame();
                 handler.draw(&mut ctx.gfx);
-                ctx.gfx.end_frame(acquire);
+                ctx.gfx.render(future, acquire);
             },
 
             _ => ()
@@ -164,7 +190,9 @@ fn process_event<S: EventHandler + 'static>(event: &Event<()>, ctx: &mut Context
     }
 }
 
-pub trait EventHandler {
+pub trait EventHandler: Sized + 'static {
+    fn create(_ctx: &mut Context) -> Self;
+
     fn update(&mut self, _time: &TimeContext, _input: &InputContext);
     fn draw(&mut self, _gfx: &mut GraphicsContext);
     fn char_input(&mut self, _ch: char) { /* Empty */ }

@@ -2,7 +2,7 @@ use std::sync::Arc;
 use vulkano::swapchain::{acquire_next_image, PresentMode, Surface, Swapchain, SwapchainCreateInfo, SwapchainPresentInfo};
 use vulkano::{single_pass_renderpass, sync, Validated, VulkanError, VulkanLibrary};
 use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
-use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryCommandBufferAbstract, RenderPassBeginInfo, SubpassBeginInfo, SubpassEndInfo};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryCommandBufferAbstract, RenderingInfo, RenderPassBeginInfo, SubpassBeginInfo, SubpassEndInfo};
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags};
 use vulkano::format::{ClearValue, Format};
@@ -77,7 +77,7 @@ impl Renderer {
         let physical_device =
             Self::get_physical_device(instance.clone(), surface.clone(), &device_extensions).unwrap();
 
-        let queue = Self::get_queue(physical_device.clone(), &device_extensions);
+        let queue = Self::create_queue(physical_device.clone(), &device_extensions);
         let device = queue.device();
 
         let caps = physical_device
@@ -157,7 +157,7 @@ impl Renderer {
        Ok(physical_device)
     }
 
-    pub(self) fn get_queue(
+    fn create_queue(
         physical_device: Arc<PhysicalDevice>,
         device_extensions: &DeviceExtensions
     ) -> Arc<Queue>{
@@ -295,8 +295,7 @@ impl Renderer {
 pub struct GraphicsContext {
     window: Arc<Window>,
     renderer: Renderer,
-    fps_limit: FpsLimit,
-    current_frame: Option<Box<dyn GpuFuture + 'static>>
+    fps_limit: FpsLimit
 }
 
 impl GraphicsContext {
@@ -315,7 +314,6 @@ impl GraphicsContext {
         GraphicsContext {
             window,
             renderer,
-            current_frame: None,
             fps_limit: conf.window_mode.fps_limit
         }
     }
@@ -351,72 +349,90 @@ impl GraphicsContext {
         }
     }
 
-    pub(super) fn begin_frame(&mut self) {
+    pub fn clear_frame(&mut self) -> Box<dyn GpuFuture + Send + Sync + 'static> {
         let queue = self.renderer.queue.clone();
-        let device = queue.device();
-        let allocators = self.renderer.allocators.clone();
-        let buffer = allocators.buffer.clone();
+        let buffer = self.renderer.allocators.buffer.clone();
+
+        let format = self.swapchain_format();
+        let view = ImageView::new_default(self.swapchain_image()).unwrap();
 
         let clear_pass = single_pass_renderpass!(
-            device.clone(),
+            queue.device().clone(),
             attachments: {
                 color: {
-                format: self.swapchain_format(),
-                samples: 1,
-                load_op: Clear,
-                store_op: Store,
+                    format: format,
+                    samples: 1,
+                    load_op: Clear,
+                    store_op: Store,
                 },
             },
-            pass: { color: [color],
+            pass: {
+                color: [color],
                 depth_stencil: {},
-            },
+            }
         ).unwrap();
 
-        let image = self.swapchain_image();
-        let view = ImageView::new_default(image.clone()).unwrap();
-        let framebuffer = Framebuffer::new(
-            clear_pass.clone(),
+        let clear_buffer = Framebuffer::new(
+            clear_pass,
             FramebufferCreateInfo {
                 attachments: vec![view],
                 ..Default::default()
             },
         ).unwrap();
 
-        let mut builder = AutoCommandBufferBuilder::primary(
+        let mut command_buffer = AutoCommandBufferBuilder::primary(
             &buffer,
             queue.queue_family_index(),
             CommandBufferUsage::MultipleSubmit
         ).unwrap();
 
-        builder
+        command_buffer
             .begin_render_pass(
                 RenderPassBeginInfo {
-                    clear_values: vec![Some(ClearValue::Float([22.0/255.0, 22.0/255.0, 29.0/255.0, 1.0]))],
-                    ..RenderPassBeginInfo::framebuffer(framebuffer.clone())
+                    clear_values: vec![Some([22.0/255.0, 22.0/255.0, 29.0/255.0, 1.0].into())],
+                    ..RenderPassBeginInfo::framebuffer(clear_buffer)
                 },
                 SubpassBeginInfo::default()
             ).unwrap()
-            .end_render_pass(
-                SubpassEndInfo::default()
-            ).unwrap();
+            .end_render_pass(SubpassEndInfo::default()).unwrap();
 
-        let future = builder.build().unwrap()
-            .execute(self.renderer.queue.clone())
-            .unwrap()
-            .then_signal_fence_and_flush()
-            .unwrap();
+        let builder = command_buffer
+            .build().unwrap()
+            .execute(queue).unwrap()
+            .then_signal_fence_and_flush().unwrap();
 
-        future.wait(None).expect("Wait error");
+        builder.wait(None).expect("Wait error");
 
-        self.current_frame = Some(future.boxed());
+        builder.boxed_send_sync()
     }
 
-    pub(super) fn end_frame(&mut self, acquire: Box<dyn GpuFuture + 'static>) {
-        let future = self.current_frame
-            .take().unwrap().join(acquire).boxed();
+    fn create_objects_builder(&mut self) -> Arc<impl PrimaryCommandBufferAbstract + 'static> {
+        let objects_commands = AutoCommandBufferBuilder::primary(
+            &self.renderer.allocators.buffer,
+            self.renderer.queue.queue_family_index(),
+            CommandBufferUsage::MultipleSubmit
+        ).unwrap();
 
-        self.renderer.present(future);
-        self.window.request_redraw()
+        // Todo: Add objects buffers apply;
+
+        let objects_builder =
+            objects_commands.build().unwrap();
+
+        objects_builder
+    }
+
+    pub fn render(&mut self, future: Box<dyn GpuFuture + Send + Sync>, acquire: Box<dyn GpuFuture>) {
+        // Todo: drawing as creating a lot of command buffers;
+
+        let objects_builder = self.create_objects_builder();
+
+        let frame = future
+            .then_execute(self.renderer.queue.clone(), objects_builder)
+            .unwrap()
+            .join(acquire).boxed();
+
+        self.renderer.present(frame);
+        self.window.request_redraw();
     }
 
     pub(super) fn resize(&mut self) {
