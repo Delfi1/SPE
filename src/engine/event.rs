@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use vulkano::sync::GpuFuture;
 use vulkano::VulkanError;
 use winit::event::{ElementState, Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -8,8 +7,6 @@ use winit::platform::scancode::PhysicalKeyExtScancode;
 use winit::window::Fullscreen;
 use crate::engine::config::FpsLimit;
 use crate::engine::graphics::GraphicsContext;
-use crate::engine::input::InputContext;
-use crate::engine::time::TimeContext;
 use super::context::*;
 
 pub struct EventWorker<Handler>
@@ -43,8 +40,6 @@ where
             if !ctx.is_running {
                 target.exit()
             }
-
-            ctx.gfx.window().set_cursor_visible(!ctx.gfx.window().has_focus());
 
             update_title(ctx);
             process_event(&event, ctx, handler);
@@ -168,7 +163,7 @@ fn process_event<S: EventHandler + 'static>(event: &Event<()>, ctx: &mut Context
                 // Update main states;
                 ctx.time.tick();
                 match_input(ctx);
-                handler.update(&ctx.time, &ctx.input);
+                handler.update(&ctx);
                 ctx.input.update();
 
                 let future = ctx.gfx.clear_frame();
@@ -193,7 +188,7 @@ fn process_event<S: EventHandler + 'static>(event: &Event<()>, ctx: &mut Context
 pub trait EventHandler: Sized + 'static {
     fn create(_ctx: &mut Context) -> Self;
 
-    fn update(&mut self, _time: &TimeContext, _input: &InputContext);
+    fn update(&mut self, _ctx: &Context);
     fn draw(&mut self, _gfx: &mut GraphicsContext);
     fn char_input(&mut self, _ch: char) { /* Empty */ }
 

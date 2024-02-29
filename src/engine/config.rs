@@ -56,6 +56,7 @@ pub(super) struct WindowMode {
     pub(super) borderless: bool,
     pub(super) fullscreen: bool,
     pub(super) resizable: bool,
+    pub(super) cursor_visible: bool,
     pub(super) visible: bool,
     pub(super) transparent: bool
 }
@@ -85,6 +86,7 @@ impl Default for WindowMode {
             fps_limit: FpsLimit::Vsync,
             borderless: false,
             resizable: true,
+            cursor_visible: true,
             visible: true,
             transparent: false
         }
@@ -106,6 +108,10 @@ impl Configuration {
             window_setup,
             window_mode
         }
+    }
+
+    pub(super) fn set_cursor_visible(&mut self, visible: bool) {
+        self.window_mode.cursor_visible = visible;
     }
 
     pub(super) fn set_size(&mut self, size: PhysicalSize<f32>) {

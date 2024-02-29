@@ -287,6 +287,7 @@ impl Renderer {
             window_builder
                 .build(event_loop).unwrap()
         );
+        window.set_cursor_visible(conf.window_mode.cursor_visible);
 
         window
     }
