@@ -44,6 +44,8 @@ where
                 target.exit()
             }
 
+            ctx.gfx.window().set_cursor_visible(!ctx.gfx.window().has_focus());
+
             update_title(ctx);
             process_event(&event, ctx, handler);
 

@@ -406,10 +406,29 @@ impl GraphicsContext {
         builder.boxed_send_sync()
     }
 
+    fn create_objects_builder(&mut self) -> Arc<impl PrimaryCommandBufferAbstract + 'static> {
+        let objects_commands = AutoCommandBufferBuilder::primary(
+            &self.renderer.allocators.buffer,
+            self.renderer.queue.queue_family_index(),
+            CommandBufferUsage::MultipleSubmit
+        ).unwrap();
+
+        // Todo: Add objects buffers apply;
+
+        let objects_builder =
+            objects_commands.build().unwrap();
+
+        objects_builder
+    }
+
     pub fn render(&mut self, future: Box<dyn GpuFuture + Send + Sync>, acquire: Box<dyn GpuFuture>) {
         // Todo: drawing as creating a lot of command buffers;
 
+        let objects_builder = self.create_objects_builder();
+
         let frame = future
+            .then_execute(self.renderer.queue.clone(), objects_builder)
+            .unwrap()
             .join(acquire).boxed();
 
         self.renderer.present(frame);
