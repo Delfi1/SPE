@@ -48,6 +48,11 @@ impl ContextBuilder {
         self
     }
 
+    pub fn with_cursor_visible(mut self, visible: bool) -> Self {
+        self.conf.set_cursor_visible(visible);
+        self
+    }
+
     pub fn with_size(mut self, size: PhysicalSize<f32>) -> Self {
         self.conf.set_size(size);
         self
