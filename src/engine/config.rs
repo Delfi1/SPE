@@ -1,10 +1,13 @@
+use std::path::Path;
 use winit::dpi::PhysicalSize;
+use winit::platform::windows::IconExtWindows;
+use winit::window::Icon;
 
 #[derive(Clone)]
 pub(super) struct WindowSetup {
     pub(super) title: String,
     pub(super) author: String,
-    icon: String
+    pub(super) icon: Option<Icon>
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -40,7 +43,15 @@ impl Default for WindowSetup {
     fn default() -> Self {
         let title = "Engine".to_string();
         let author = "User".to_string();
-        let icon = String::new();
+
+        let icon_path = Path::new("./src/resources/gear.ico");
+
+        println!("{}", icon_path.as_os_str().to_str().unwrap());
+
+        let icon = Some(Icon::from_path(
+            icon_path,
+            Some([256, 256].into())
+        ).unwrap());
 
         Self {title, author, icon}
     }
@@ -108,10 +119,6 @@ impl Configuration {
             window_setup,
             window_mode
         }
-    }
-
-    pub(super) fn set_cursor_visible(&mut self, visible: bool) {
-        self.window_mode.cursor_visible = visible;
     }
 
     pub(super) fn set_size(&mut self, size: PhysicalSize<f32>) {

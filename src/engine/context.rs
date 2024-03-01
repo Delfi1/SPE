@@ -1,5 +1,6 @@
 use winit::dpi::PhysicalSize;
 use winit::event_loop::EventLoop;
+use winit::window::Icon;
 use super::graphics::*;
 use crate::engine::config::*;
 use crate::engine::input::InputContext;
@@ -43,13 +44,18 @@ impl ContextBuilder {
         }
     }
 
+    pub fn with_icon(mut self, icon: Option<Icon>) -> Self {
+        self.conf.window_setup.icon = icon;
+        self
+    }
+
     pub fn with_min_size(mut self, size: PhysicalSize<f32>) -> Self {
         self.conf.set_min_size(size);
         self
     }
 
     pub fn with_cursor_visible(mut self, visible: bool) -> Self {
-        self.conf.set_cursor_visible(visible);
+        self.conf.window_mode.cursor_visible = visible;
         self
     }
 

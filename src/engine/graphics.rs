@@ -16,7 +16,7 @@ use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 use crate::engine::config::{Configuration, FpsLimit};
 
-pub mod meshes;
+pub mod objects;
 
 pub struct Allocators {
     memory: Arc<StandardMemoryAllocator>,
@@ -277,6 +277,7 @@ impl Renderer {
 
         let window_builder = window_builder
             .with_title(conf.window_setup.title.clone())
+            .with_window_icon(conf.window_setup.icon.clone())
             .with_resizable(conf.window_mode.resizable)
             .with_visible(false)
             .with_transparent(conf.window_mode.transparent)

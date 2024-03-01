@@ -47,5 +47,4 @@ impl EventHandler for Application {
     fn on_quit(&mut self) {
 
     }
-
 }
