@@ -17,6 +17,7 @@ use winit::window::{Window, WindowBuilder};
 use crate::engine::config::{Configuration, FpsLimit};
 
 pub mod objects;
+use objects::{Object, RenderData};
 
 pub struct Allocators {
     memory: Arc<StandardMemoryAllocator>,
@@ -263,6 +264,25 @@ impl Renderer {
         }
     }
 
+    pub(super) fn get_render_pass(&mut self) -> Arc<RenderPass> {
+        single_pass_renderpass!(
+            self.queue.device().clone(),
+            attachments: {
+                color: {
+                    format: self.swapchain.image_format(),
+                    samples: 1,
+                    load_op: Clear,
+                    store_op: Store,
+                },
+            },
+            pass: {
+                color: [color],
+                depth_stencil: {},
+            }
+
+        ).unwrap()
+    }
+
     pub(self) fn create_window(conf: &Configuration, event_loop: &EventLoop<()>) -> Arc<Window> {
         #[cfg(target_os = "windows")]
             let mut window_builder = {
@@ -297,6 +317,7 @@ impl Renderer {
 pub struct GraphicsContext {
     window: Arc<Window>,
     renderer: Renderer,
+    objects: Vec<&'static mut Object>,
     fps_limit: FpsLimit
 }
 
@@ -313,9 +334,11 @@ impl GraphicsContext {
 
         window.set_visible(conf.window_mode.visible);
         window.request_redraw();
+
         GraphicsContext {
             window,
             renderer,
+            objects: Vec::new(),
             fps_limit: conf.window_mode.fps_limit
         }
     }
@@ -332,7 +355,7 @@ impl GraphicsContext {
         self.renderer.swapchain.image_format()
     }
 
-    pub fn acquire(&mut self) -> Result<Box<dyn GpuFuture>, VulkanError> {
+    pub(super) fn acquire(&mut self) -> Result<Box<dyn GpuFuture>, VulkanError> {
         self.renderer.acquire()
     }
 
@@ -351,29 +374,13 @@ impl GraphicsContext {
         }
     }
 
-    pub fn clear_frame(&mut self) -> Box<dyn GpuFuture + Send + Sync + 'static> {
+    pub(super) fn clear_frame(&mut self) -> Box<dyn GpuFuture + Send + Sync + 'static> {
         let queue = self.renderer.queue.clone();
         let buffer = self.renderer.allocators.buffer.clone();
 
-        let format = self.swapchain_format();
+        let clear_pass = self.renderer.get_render_pass();
+
         let view = ImageView::new_default(self.swapchain_image()).unwrap();
-
-        let clear_pass = single_pass_renderpass!(
-            queue.device().clone(),
-            attachments: {
-                color: {
-                    format: format,
-                    samples: 1,
-                    load_op: Clear,
-                    store_op: Store,
-                },
-            },
-            pass: {
-                color: [color],
-                depth_stencil: {},
-            }
-        ).unwrap();
-
         let clear_buffer = Framebuffer::new(
             clear_pass,
             FramebufferCreateInfo {
@@ -409,13 +416,34 @@ impl GraphicsContext {
     }
 
     fn create_objects_builder(&mut self) -> Arc<impl PrimaryCommandBufferAbstract + 'static> {
-        let objects_commands = AutoCommandBufferBuilder::primary(
+        let mut objects_commands = AutoCommandBufferBuilder::primary(
             &self.renderer.allocators.buffer,
             self.renderer.queue.queue_family_index(),
             CommandBufferUsage::MultipleSubmit
         ).unwrap();
 
-        // Todo: Add objects buffers apply;
+        let render_pass = self.renderer.get_render_pass();
+
+        let view = ImageView::new_default(self.swapchain_image()).unwrap();
+        let frame_buffer = Framebuffer::new(
+            render_pass,
+            FramebufferCreateInfo {
+                attachments: vec![view],
+                ..Default::default()
+            },
+        ).unwrap();
+
+        objects_commands
+            .begin_render_pass(
+                RenderPassBeginInfo {
+                    clear_values: vec![Some([22.0/255.0, 22.0/255.0, 29.0/255.0, 1.0].into())],
+                    ..RenderPassBeginInfo::framebuffer(frame_buffer)
+                },
+                SubpassBeginInfo::default()
+            ).unwrap()
+            .end_render_pass(
+                SubpassEndInfo::default()
+            ).unwrap();
 
         let objects_builder =
             objects_commands.build().unwrap();
@@ -424,8 +452,6 @@ impl GraphicsContext {
     }
 
     pub fn render(&mut self, future: Box<dyn GpuFuture + Send + Sync>, acquire: Box<dyn GpuFuture>) {
-        // Todo: drawing as creating a lot of command buffers;
-
         let objects_builder = self.create_objects_builder();
 
         let frame = future

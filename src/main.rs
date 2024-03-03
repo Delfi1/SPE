@@ -12,24 +12,22 @@ use engine::event::EventHandler;
 use engine::graphics::GraphicsContext;
 
 fn main() {
+    updater::update().expect("Update error");
+
     let (context, event_loop) =
         ContextBuilder::new("Simple Physics Engine", "Delfi")
             .build();
-
-    updater::update().expect("Update error");
 
     event::EventWorker::<Application>::new(context).run(event_loop);
 }
 
 pub struct Application {
-    text: String
+
 }
 
 impl EventHandler for Application {
     fn create(_ctx: &mut Context) -> Self {
-        Self {
-            text: String::new()
-        }
+        Self {}
     }
     
     fn update(&mut self, _ctx: &Context) {
