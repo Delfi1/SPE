@@ -7,10 +7,15 @@ edition = "2021"
 opt-level = 3
 
 [dependencies]
+# Graphics && Window handle
 vulkano = "*"
 vulkano-shaders = "*"
 winit = { version = "*", features = ["default", "rwh_05"] }
+tinyfiledialogs = "*"
 glam = "*"
+
+# Updater
 self_update = {version = "*", features = ["default", "archive-tar"]}
+include_dir = "*"
 tempfile = "*"
 reqwest = "*"

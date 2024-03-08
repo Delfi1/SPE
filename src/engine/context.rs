@@ -35,6 +35,7 @@ pub struct ContextBuilder {
 }
 
 impl ContextBuilder {
+    #[inline]
     pub fn new(title: &str, author: &str) -> Self {
         // Create configuration;
         let conf = Configuration::new(title, author);
@@ -44,46 +45,55 @@ impl ContextBuilder {
         }
     }
 
+    #[inline]
     pub fn with_icon(mut self, icon: Option<Icon>) -> Self {
         self.conf.window_setup.icon = icon;
         self
     }
 
+    #[inline]
     pub fn with_min_size(mut self, size: PhysicalSize<f32>) -> Self {
         self.conf.set_min_size(size);
         self
     }
 
+    #[inline]
     pub fn with_cursor_visible(mut self, visible: bool) -> Self {
         self.conf.window_mode.cursor_visible = visible;
         self
     }
 
+    #[inline]
     pub fn with_size(mut self, size: PhysicalSize<f32>) -> Self {
         self.conf.set_size(size);
         self
     }
 
+    #[inline]
     pub fn with_visible(mut self, visible: bool) -> Self{
         self.conf.window_mode.visible = visible;
         self
     }
 
+    #[inline]
     pub fn with_transparent(mut self, transparent: bool) -> Self {
         self.conf.window_mode.transparent = transparent;
         self
     }
 
+    #[inline]
     pub fn with_fps_limit(mut self, fps_limit: FpsLimit) -> Self {
         self.conf.window_mode.fps_limit = fps_limit;
         self
     }
 
+    #[inline]
     pub fn with_resizable(mut self, resizable: bool) -> Self {
         self.conf.window_mode.resizable = resizable;
         self
     }
 
+    #[inline]
     pub fn build(mut self) -> (Context, EventLoop<()>) {
         let event_loop = EventLoop::new().expect("Event loop creation error");
 

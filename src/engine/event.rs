@@ -1,10 +1,13 @@
 use std::collections::HashSet;
+use std::ffi::OsStr;
+use std::path::Path;
 use vulkano::VulkanError;
+use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::keyboard::SmolStr;
 use winit::platform::scancode::PhysicalKeyExtScancode;
-use winit::window::Fullscreen;
+use winit::window::{Fullscreen, Icon};
 use crate::engine::config::FpsLimit;
 use crate::engine::graphics::GraphicsContext;
 use super::context::*;
@@ -141,13 +144,29 @@ fn process_event<S: EventHandler + 'static>(event: &Event<()>, ctx: &mut Context
             WindowEvent::DroppedFile(_buf) => {
                 // When file drops
                 println!("file dropped!");
+
+                let file_path = Path::new(_buf);
+
+                #[cfg(target_os = "windows")]
+                if file_path.is_file() && file_path.extension() == Some(OsStr::new("ico")) {
+                    use winit::platform::windows::IconExtWindows;
+
+                    let icon = Some(
+                        Icon::from_path(
+                            Path::new("./src/assets/gear.ico"),
+                            Some(PhysicalSize::new(256, 256))
+                        ).unwrap()
+                    );
+
+                    ctx.gfx.window().set_window_icon(icon);
+                }
+
                 ctx.gfx.window().request_redraw();
             },
 
             WindowEvent::HoveredFile(_buf) => {
                 println!("file hovered!");
             },
-
             WindowEvent::RedrawRequested => {
                 // Create current image acquire;
                 let acquire = match ctx.gfx.acquire() {

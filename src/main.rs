@@ -12,7 +12,11 @@ use engine::event::EventHandler;
 use engine::graphics::GraphicsContext;
 
 fn main() {
-    updater::update().expect("Update error");
+    println!("Updater...");
+    #[cfg(debug_assertions)]
+    println!("Not release continue...");
+    #[cfg(not(debug_assertions))]
+    updater::update().expect("Updater error");
 
     let (context, event_loop) =
         ContextBuilder::new("Simple Physics Engine", "Delfi")

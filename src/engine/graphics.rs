@@ -17,7 +17,6 @@ use winit::window::{Window, WindowBuilder};
 use crate::engine::config::{Configuration, FpsLimit};
 
 pub mod objects;
-use objects::{Object, RenderData};
 
 pub struct Allocators {
     memory: Arc<StandardMemoryAllocator>,
@@ -289,7 +288,7 @@ impl Renderer {
             use winit::platform::windows::WindowBuilderExtWindows;
             WindowBuilder::new()
                 //.with_menu()
-                .with_drag_and_drop(false)
+                .with_drag_and_drop(true)
         };
 
         #[cfg(not(target_os = "windows"))]
@@ -317,7 +316,6 @@ impl Renderer {
 pub struct GraphicsContext {
     window: Arc<Window>,
     renderer: Renderer,
-    objects: Vec<&'static mut Object>,
     fps_limit: FpsLimit
 }
 
@@ -338,7 +336,6 @@ impl GraphicsContext {
         GraphicsContext {
             window,
             renderer,
-            objects: Vec::new(),
             fps_limit: conf.window_mode.fps_limit
         }
     }
@@ -441,6 +438,7 @@ impl GraphicsContext {
                 },
                 SubpassBeginInfo::default()
             ).unwrap()
+            //
             .end_render_pass(
                 SubpassEndInfo::default()
             ).unwrap();

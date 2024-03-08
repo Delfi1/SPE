@@ -1,6 +1,7 @@
 use std::path::Path;
-use winit::dpi::PhysicalSize;
+#[cfg(target_os = "windows")]
 use winit::platform::windows::IconExtWindows;
+use winit::dpi::PhysicalSize;
 use winit::window::Icon;
 
 #[derive(Clone)]
@@ -40,18 +41,23 @@ impl WindowSetup {
 }
 
 impl Default for WindowSetup {
+    #[inline]
     fn default() -> Self {
         let title = "Engine".to_string();
         let author = "User".to_string();
 
-        let icon_path = Path::new("./src/resources/gear.ico");
+        let icon = match Path::new("./src/assets/gear.ico").is_file() {
+            true => Some(
+                Icon::from_path(
+                    Path::new("./src/assets/gear.ico"),
+                    Some(PhysicalSize::new(256, 256))
+                ).unwrap()
+            ),
+            false => None
+        };
 
-        println!("{}", icon_path.as_os_str().to_str().unwrap());
-
-        let icon = Some(Icon::from_path(
-            icon_path,
-            Some([256, 256].into())
-        ).unwrap());
+        #[cfg(not(target_os = "windows"))]
+        let icon = None;
 
         Self {title, author, icon}
     }
