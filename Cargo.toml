@@ -10,12 +10,12 @@ opt-level = 3
 # Graphics && Window handle
 vulkano = "*"
 vulkano-shaders = "*"
-winit = { version = "*", features = ["default", "rwh_05"] }
+winit = { version = "0.29.14", features = ["default", "rwh_05"] }
 tinyfiledialogs = "*"
 glam = "*"
 
 # Updater
 self_update = {version = "*", features = ["default", "archive-tar"]}
 include_dir = "*"
-tempfile = "*"
+tempfile = "3.10.1"
 reqwest = "*"

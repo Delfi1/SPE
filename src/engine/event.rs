@@ -1,29 +1,20 @@
-use std::collections::HashSet;
-use std::ffi::OsStr;
-use std::path::Path;
 use vulkano::VulkanError;
-use winit::dpi::PhysicalSize;
-use winit::event::{ElementState, Event, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoop};
-use winit::keyboard::SmolStr;
+use winit::event::{Event, WindowEvent};
+use winit::event_loop::{ControlFlow, EventLoop, EventLoopWindowTarget};
 use winit::platform::scancode::PhysicalKeyExtScancode;
-use winit::window::{Fullscreen, Icon};
-use crate::engine::config::FpsLimit;
-use crate::engine::graphics::GraphicsContext;
-use super::context::*;
 
+use super::context::Context;
+
+/// Event worker - main Engine struct;
+/// It contains main app loop and app callbacks;
 pub struct EventWorker<Handler>
-where
-    Handler: EventHandler + Sized + 'static
-{
+where Handler: EventHandler + Send + Sync + Sized + 'static {
     app: Handler,
-    context: Context,
+    context: Context
 }
 
 impl<Handler> EventWorker<Handler>
-where
-    Handler: EventHandler + 'static {
-
+where Handler: EventHandler + Send + Sync + Sized + 'static {
     pub fn new(mut context: Context) -> Self {
         let mut app = Handler::create(&mut context);
 
@@ -33,27 +24,86 @@ where
         }
     }
 
-    pub fn run(&mut self, event_loop: EventLoop<()>) {
+    pub fn run(mut self, event_loop: EventLoop<()>) {
+        let mut context = self.context;
+        let mut app = self.app;
+
         event_loop.set_control_flow(ControlFlow::Poll);
 
-        event_loop.run( move |event, target| {
-            let ctx = &mut self.context;
-            let handler = &mut self.app;
-
-            if !ctx.is_running {
-                target.exit()
-            }
+        event_loop.run(move |event, target| {
+            let ctx = &mut context;
+            let handler = &mut app;
 
             update_title(ctx);
-            process_event(&event, ctx, handler);
 
-        }).expect("Event Loop error");
+            match event {
+                Event::WindowEvent {
+                    event,
+                    ..
+                } => {
+                    match event {
+                        WindowEvent::CloseRequested => {
+                            target.exit();
+                        },
+                        WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged {..} => {
+                            ctx.graphics.set_outdated();
+                        },
+                        WindowEvent::RedrawRequested => {
+                            let acquired = match ctx.graphics.acquire() {
+                                Ok(ac) => ac,
+                                Err(VulkanError::OutOfDate) => {
+                                    // If acquire is out of date -> continue && redraw;
+                                    ctx.graphics.set_outdated();
+                                    ctx.graphics.window().request_redraw();
+                                    return;
+                                }
+                                Err(_e) => panic!("Acquire error")
+                            };
+
+                            ctx.time.tick();
+                            ctx.graphics.draw_frame(acquired);
+                        },
+                        WindowEvent::KeyboardInput {
+                            event,
+                            ..
+                        } => {
+                            let code = event.physical_key.to_scancode();
+                            let state = event.state;
+
+                            if code.is_some() {
+                                let code = code.unwrap();
+                                ctx.input.insert(code, state);
+                            }
+                        },
+                        _ => ()
+                    }
+                }
+                Event::LoopExiting => {
+                    handler.on_quit();
+                }
+                _ => ()
+            }
+
+            match_input(ctx, target);
+            ctx.input.update();
+        }).expect("Event loop error");
+    }
+}
+
+fn match_input(ctx: &mut Context, target: &EventLoopWindowTarget<()>) {
+    if ctx.input.is_key_pressed(29) && ctx.input.is_key_just_pressed(50) {
+        let window = ctx.graphics.window();
+        window.set_maximized(!window.is_maximized());
+    }
+
+    if ctx.input.is_keys_pressed(&[1, 42]) {
+        target.exit();
     }
 }
 
 fn update_title(ctx: &Context) {
-    let win_title = &ctx.conf.window_setup.title;
-    let author = &ctx.conf.window_setup.author;
+    let win_title = &ctx.conf.title;
+    let author = &ctx.conf.author;
 
     let average_fps = ctx.time.average_fps().clamp(0.0, 999.0) as u64;
 
@@ -65,157 +115,20 @@ fn update_title(ctx: &Context) {
             average_fps
         ).leak();
 
-    ctx.gfx.window().set_title(title);
+    ctx.graphics.window().set_title(title);
 }
 
-fn match_input(ctx: &mut Context) {
-    if ctx.input.is_key_just_pressed(87) {
-        let window = ctx.gfx.window();
+pub trait EventHandler: Sized + Send + Sync {
+    /// Create engine application function;
+    fn create(_ctx: &Context) -> Self;
 
-        let is_fullscreen = window.fullscreen().is_some();
-        window.set_fullscreen(if !is_fullscreen {
-            Some(Fullscreen::Borderless(window.current_monitor()))
-        } else {
-            None
-        });
-    }
+    /// Update function what provides update of engine state
+    /// DeltaTime + Input data;
+    fn update(&mut self) { /* Empty */ }
 
-    if ctx.input.is_key_pressed(29) && ctx.input.is_key_just_pressed(50) {
-        let window = ctx.gfx.window();
+    /// Draw function helps user with Mesh's drawing;
+    fn draw(&self) { /* Empty */ }
 
-        window.set_maximized(!window.is_maximized())
-    }
-
-    if ctx.input.is_key_pressed(29) && ctx.input.is_key_just_pressed(47) {
-        let fps_limit = match ctx.gfx.fps_limit() {
-            FpsLimit::Inf => FpsLimit::Vsync,
-            _ => FpsLimit::Inf
-        };
-
-        ctx.gfx.set_fps_limit(fps_limit);
-    }
-
-    let exit_keys = HashSet::from([1, 42]);
-
-    if ctx.input.is_keys_pressed(exit_keys) {
-        ctx.is_running = false;
-    }
-}
-
-fn process_event<S: EventHandler + 'static>(event: &Event<()>, ctx: &mut Context, handler: &mut S) {
-    /// Match window events
-    if let Event::WindowEvent { event, .. } = event {
-        match event {
-            WindowEvent::CloseRequested => {
-                ctx.is_running = false;
-            },
-
-            WindowEvent::Resized(_) => {
-                ctx.gfx.resize()
-            }
-
-            WindowEvent::KeyboardInput {
-                event,
-                ..
-            } => {
-                let state = event.state;
-                let scancode = event.physical_key.to_scancode();
-
-                if event.text.is_some() && !(ctx.input.is_key_pressed(29) || ctx.input.is_key_pressed(56)){
-                    let text = event.text.clone().unwrap();
-                    let mut chars = text.chars();
-
-                    let input_char = chars.next().unwrap();
-                    handler.char_input(input_char);
-                }
-
-                if scancode.is_some() {
-                    let code = scancode.unwrap();
-                    let text = event.text.clone();
-                    match state {
-                        ElementState::Pressed => handler.button_pressed(code, text),
-                        ElementState::Released => handler.button_released(code)
-                    };
-                }
-
-                ctx.input.insert(scancode, state);
-            },
-
-            WindowEvent::DroppedFile(_buf) => {
-                // When file drops
-                println!("file dropped!");
-
-                let file_path = Path::new(_buf);
-
-                #[cfg(target_os = "windows")]
-                if file_path.is_file() && file_path.extension() == Some(OsStr::new("ico")) {
-                    use winit::platform::windows::IconExtWindows;
-
-                    let icon = Some(
-                        Icon::from_path(
-                            Path::new("./src/assets/gear.ico"),
-                            Some(PhysicalSize::new(256, 256))
-                        ).unwrap()
-                    );
-
-                    ctx.gfx.window().set_window_icon(icon);
-                }
-
-                ctx.gfx.window().request_redraw();
-            },
-
-            WindowEvent::HoveredFile(_buf) => {
-                println!("file hovered!");
-            },
-            WindowEvent::RedrawRequested => {
-                // Create current image acquire;
-                let acquire = match ctx.gfx.acquire() {
-                    Ok(ac) => ac,
-                    Err(VulkanError::OutOfDate) => {
-                        // If acquire is out of date -> redraw;
-                        ctx.gfx.window().request_redraw();
-                        return;
-                    }
-                    Err(_e) => panic!("Acquire error")
-                };
-
-                // Update main states;
-                ctx.time.tick();
-                match_input(ctx);
-                handler.update(&ctx);
-                ctx.input.update();
-
-                let future = ctx.gfx.clear_frame();
-                handler.draw(&mut ctx.gfx);
-                ctx.gfx.render(future, acquire);
-            },
-
-            _ => ()
-        }
-    }
-
-    /// Match loop events;
-    match event {
-        Event::LoopExiting => {
-            handler.on_quit();
-        },
-
-        _ => ()
-    }
-}
-
-pub trait EventHandler: Sized + 'static {
-    fn create(_ctx: &mut Context) -> Self;
-
-    fn update(&mut self, _ctx: &Context);
-    fn draw(&mut self, _gfx: &mut GraphicsContext);
-    fn char_input(&mut self, _ch: char) { /* Empty */ }
-
-    /// Then button was pressed;
-    fn button_pressed(&mut self, _btn: u32, _ch: Option<SmolStr>) { /* Empty */ }
-
-    /// Then button was released;
-    fn button_released(&mut self, _btn: u32) { /* Empty */ }
-
+    /// On quit engine callback;
     fn on_quit(&mut self) { /* Empty */ }
 }

@@ -1,52 +1,31 @@
-#![cfg_attr(
-    not(debug_assertions),
-    windows_subsystem = "windows"
-)]
+use engine::context::Context;
+use engine::context::ContextBuilder;
+use engine::event::{EventHandler, EventWorker};
 
 mod engine;
 mod updater;
 
-use engine::context::{Context, ContextBuilder};
-use engine::event;
-use engine::event::EventHandler;
-use engine::graphics::GraphicsContext;
-
 fn main() {
-    println!("Updater...");
-    #[cfg(debug_assertions)]
-    println!("Not release continue...");
-    #[cfg(not(debug_assertions))]
-    updater::update().expect("Updater error");
+    let (context, event_loop) = ContextBuilder::new("SPE", "Delfi").build();
 
-    let (context, event_loop) =
-        ContextBuilder::new("Simple Physics Engine", "Delfi")
-            .build();
-
-    event::EventWorker::<Application>::new(context).run(event_loop);
+    EventWorker
+        ::<App>::new(context).run(event_loop);
 }
 
-pub struct Application {
+pub struct App {
 
 }
 
-impl EventHandler for Application {
-    fn create(_ctx: &mut Context) -> Self {
+impl EventHandler for App {
+    fn create(_ctx: &Context) -> Self {
         Self {}
     }
-    
-    fn update(&mut self, _ctx: &Context) {
+
+    fn update(&mut self) {
 
     }
 
-    fn draw(&mut self, _gfx: &mut GraphicsContext) {
-
-    }
-
-    fn char_input(&mut self, _ch: char) {
-        print!("{_ch}");
-    }
-
-    fn on_quit(&mut self) {
-
+    fn draw(&self) {
+        //println!("On draw")
     }
 }
