@@ -1,76 +1,73 @@
 use winit::event_loop::EventLoop;
 
-use config::Configuration;
+use config::Config;
 use graphics::GraphicsContext;
 use input::InputContext;
 use time::TimeContext;
 
-mod config;
-
-mod graphics;
 mod input;
 mod time;
+mod graphics;
+mod config;
 
-/// Main context object;
 pub struct Context {
-    pub(super) conf: Configuration,
-    pub(super) graphics: GraphicsContext,
+    pub(super) title: String,
+    pub(super) author: String,
     pub(super) input: InputContext,
-    pub(super) time: TimeContext
+    pub(super) time: TimeContext,
+    pub(super) graphics: GraphicsContext,
 }
 
 impl Context {
-    #[inline]
-    pub(super) fn new(conf: Configuration, event_loop: &EventLoop<()>) -> Self {
-        let graphics = GraphicsContext::new(&conf, event_loop);
-        let input = InputContext::new();
-        let time = TimeContext::new();
-        graphics.window().request_redraw();
-
-        Self {
-            conf,
-            graphics,
-            input,
-            time
-        }
+    pub fn new() -> (Self, EventLoop<()>) {
+        let builder = ContextBuilder::default();
+        builder.build()
     }
 }
 
-/// Context builder helps with window initialization;
+#[derive(Default)]
 pub struct ContextBuilder {
-    conf: Configuration,
-    event_loop: EventLoop<()>
+    config: Config,
 }
 
 impl ContextBuilder {
-    #[inline]
     pub fn new(title: &str, author: &str) -> Self {
-        Self {
-            conf: Configuration::new(title, author),
-            event_loop: EventLoop::new().expect("Setup error")
-        }
+        Self { config: Config::new(title, author) }
     }
 
-    /// Set window init visible;
-    #[inline]
+    pub fn with_transparent(mut self, transparent: bool) -> Self {
+        self.config.transparent = transparent;
+        self
+    }
+
     pub fn with_visible(mut self, visible: bool) -> Self {
-        self.conf.visible = visible;
+        self.config.visible = visible;
         self
     }
 
-    /// Set window init size;
-    #[inline]
+    pub fn with_min_size(mut self, min: Option<(i32, i32)>) -> Self {
+        self.config.min_size = match min {
+            Some(size) => Some(size.into()),
+            None => None
+        };
+
+        self
+    }
+
     pub fn with_size(mut self, width: i32, height: i32) -> Self {
-        self.conf.width = width;
-        self.conf.height = height;
+        self.config.size = (width, height).into();
         self
     }
 
-    /// Finish preparing and create context
-    #[inline]
     pub fn build(self) -> (Context, EventLoop<()>) {
-        let context = Context::new(self.conf, &self.event_loop);
+        let event_loop = EventLoop::new().unwrap();
+        let title = self.config.title.clone();
+        let author = self.config.author.clone();
 
-        (context, self.event_loop)
+        let time = TimeContext::new();
+        let input = InputContext::new();
+        let graphics = GraphicsContext::new(&self.config, &event_loop);
+
+        (Context { title, author, time, input, graphics }, event_loop)
     }
 }

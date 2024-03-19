@@ -2,59 +2,45 @@ use std::time::{Duration, Instant};
 
 pub struct TimeContext {
     init_time: Instant,
-    frame_time: Instant,
-    durations: Vec<Duration>,
-    frame_count: u32
+    current: Instant,
+    frames: Vec<Duration>,
 }
 
-const MAX_DELTA_COUNT: usize = 50;
+const MAX_FRAMES: usize = 200;
 
 impl TimeContext {
-    pub fn new() -> Self {
-        let durations  = Vec::from([Duration::from_millis(1)]);
-
+    pub(super) fn new() -> Self {
         let init_time = Instant::now();
-        let frame_time = init_time.clone();
+        let current = init_time.clone();
+        let frames = Vec::from([Duration::from_secs_f64(0.01)]);
 
-        Self {
-            init_time,
-            frame_time,
-            durations,
-            frame_count: 0
-        }
+        Self { init_time, current, frames }
     }
 
-    #[inline]
-    pub(crate) fn tick(&mut self) {
+    pub(in crate::engine) fn tick(&mut self) {
         let now = Instant::now();
-        let time_since_last = now - self.frame_time;
-        self.durations.push(time_since_last);
-        self.frame_time = now;
-        self.frame_count += 1;
+        let elapsed = self.current.elapsed();
+        self.current = now;
 
-        if self.durations.len() > MAX_DELTA_COUNT {
-            self.durations.remove(0);
+        self.frames.push(elapsed);
+        if self.frames.len() >= MAX_FRAMES {
+            self.frames.remove(0);
         }
     }
 
-    #[inline]
     pub fn average_delta(&self) -> Duration {
-        self.durations.iter().sum::<Duration>() / self.durations.len() as u32
+        let sum: Duration = self.frames.iter().sum();
+        let len = self.frames.len() as u32;
+
+        sum / len
     }
 
-    #[inline]
-    pub fn average_fps(&self) -> f64 {
-        1.0 / self.average_delta().as_secs_f64()
-    }
-
-    #[inline]
-    pub fn ticks(&self) -> u32 {
-        self.frame_count
-    }
-
-    #[inline]
     pub fn delta(&self) -> Duration {
-        self.durations.last().unwrap().clone()
+        self.frames.last().unwrap().clone()
     }
 
+    pub fn average_fps(&self) -> u32 {
+        let average = 1.0 / self.average_delta().as_secs_f64();
+        average.round() as u32
+    }
 }

@@ -1,31 +1,26 @@
 use engine::context::Context;
-use engine::context::ContextBuilder;
-use engine::event::{EventHandler, EventWorker};
+use engine::EventHandler;
+
+use crate::engine::context::ContextBuilder;
 
 mod engine;
-mod updater;
 
 fn main() {
-    let (context, event_loop) = ContextBuilder::new("SPE", "Delfi").build();
+    let (context, event_loop) = ContextBuilder::new("SPE", "Delfi")
+        .build();
 
-    EventWorker
-        ::<App>::new(context).run(event_loop);
+    let worker = engine::Worker::<Application>::new(context);
+    worker.run(event_loop);
 }
 
-pub struct App {
+pub struct Application {}
 
-}
-
-impl EventHandler for App {
-    fn create(_ctx: &Context) -> Self {
+impl EventHandler for Application {
+    fn setup(_context: &mut Context) -> Self {
         Self {}
     }
 
-    fn update(&mut self) {
-
-    }
-
-    fn draw(&self) {
-        //println!("On draw")
+    fn on_quit(&self) {
+        println!("Exit")
     }
 }

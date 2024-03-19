@@ -1,62 +1,74 @@
 use std::collections::HashSet;
 
-use winit::event::ElementState;
+use winit::event::{ElementState, KeyEvent};
+use winit::keyboard::{KeyCode, PhysicalKey};
 
 pub struct InputContext {
-    pressed_keys: HashSet<u32>,
-    just_pressed_keys: HashSet<u32>,
-    released_keys: HashSet<u32>
+    pressed: HashSet<PhysicalKey>,
+    just_pressed: HashSet<PhysicalKey>,
+    released: HashSet<PhysicalKey>,
 }
 
 impl InputContext {
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
-            pressed_keys: HashSet::new(),
-            just_pressed_keys: HashSet::new(),
-            released_keys: HashSet::new()
+            pressed: HashSet::new(),
+            just_pressed: HashSet::new(),
+            released: HashSet::new(),
         }
     }
 
-    pub fn insert(&mut self, code: u32, state: ElementState) {
+    pub(in crate::engine) fn insert(&mut self, event: KeyEvent) {
+        let phys = event.physical_key;
+        let state = event.state;
+        let repeat = event.repeat;
+
         match state {
             ElementState::Pressed => {
-                if !self.pressed_keys.contains(&code) {
-                    self.just_pressed_keys.insert(code);
-                    println!("Key {code} was just pressed");
+                if !repeat {
+                    self.just_pressed.insert(phys);
                 }
 
-                self.pressed_keys.insert(code);
-            },
+                self.pressed.insert(phys);
+            }
             ElementState::Released => {
-                self.pressed_keys.remove(&code);
-                self.released_keys.insert(code);
+                self.pressed.remove(&phys);
+                self.released.insert(phys);
             }
         }
     }
 
-    pub fn is_key_pressed(&self, code: u32) -> bool {
-        self.pressed_keys.contains(&code)
+    pub(in crate::engine) fn update(&mut self) {
+        self.just_pressed.clear();
+        self.released.clear();
     }
 
-    pub fn is_keys_pressed(&self, codes: &[u32]) -> bool {
-        for code in codes {
-            if !self.pressed_keys.contains(code) {
+    fn from_code(code: KeyCode) -> PhysicalKey {
+        PhysicalKey::Code(code)
+    }
+
+    pub fn is_key_pressed(&self, key: KeyCode) -> bool {
+        let phys = Self::from_code(key);
+        self.pressed.contains(&phys)
+    }
+
+    pub fn is_keys_pressed(&self, keys: &[KeyCode]) -> bool {
+        for key in keys {
+            let phys = Self::from_code(*key);
+            if !self.pressed.contains(&phys) {
                 return false;
             }
         }
         return true;
     }
 
-    pub fn is_key_released(&self, code: u32) -> bool {
-        self.released_keys.contains(&code)
+    pub fn is_key_just_pressed(&self, key: KeyCode) -> bool {
+        let phys = Self::from_code(key);
+        self.just_pressed.contains(&phys)
     }
 
-    pub fn is_key_just_pressed(&self, code: u32) -> bool {
-        self.just_pressed_keys.contains(&code)
-    }
-
-    pub(in crate::engine) fn update(&mut self) {
-        self.released_keys.clear();
-        self.just_pressed_keys.clear();
+    pub fn is_key_released(&self, key: KeyCode) -> bool {
+        let phys = Self::from_code(key);
+        self.released.contains(&phys)
     }
 }
