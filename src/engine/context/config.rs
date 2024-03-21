@@ -1,5 +1,7 @@
+use serde::{Deserialize, Serialize};
 use winit::dpi::PhysicalSize;
 
+#[derive(Serialize, Deserialize)]
 pub struct Config {
     pub(super) title: String,
     pub(super) author: String,
@@ -25,7 +27,7 @@ impl Default for Config {
             title: "SPE".to_string(),
             author: "Delfi".to_string(),
             size: (1280, 720).into(),
-            min_size: None,
+            min_size: Some((640, 360).into()),
             visible: true,
             transparent: false,
         }

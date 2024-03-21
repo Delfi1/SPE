@@ -1,14 +1,19 @@
+use std::sync::Arc;
+
+use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
+use vulkano::device::Device;
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
+use vulkano::pipeline::graphics::vertex_input::Vertex as VulkanoVertex;
 use vulkano::shader::ShaderModule;
 
-use super::GraphicsContext;
 
-pub struct RenderData {
-    vs: ShaderModule,
-    fs: ShaderModule,
+mod triangle;
+mod rect;
 
-}
-
-pub trait Mesh: Sized + Send + Sync {
-    fn new(gfx: &GraphicsContext) -> Self;
-    fn render_data() -> RenderData;
+#[derive(Clone)]
+#[derive(BufferContents, VulkanoVertex)]
+#[repr(C)]
+pub struct MyVertex {
+    #[format(R32G32_SFLOAT)]
+    pub position: [f32; 2],
 }

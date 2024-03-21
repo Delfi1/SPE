@@ -1,66 +1,22 @@
 use std::sync::Arc;
 
 use vulkano::{single_pass_renderpass, VulkanLibrary};
-use vulkano::buffer::BufferContents;
+use vulkano::buffer::allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo};
+use vulkano::buffer::BufferUsage;
 use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
+use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags};
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 use vulkano::image::{Image, ImageUsage};
 use vulkano::image::view::ImageView;
 use vulkano::instance::{Instance, InstanceCreateInfo};
-use vulkano::memory::allocator::StandardMemoryAllocator;
-use vulkano::pipeline::{GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo};
-use vulkano::pipeline::graphics::color_blend::{ColorBlendAttachmentState, ColorBlendState};
-use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
-use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
-use vulkano::pipeline::graphics::multisample::MultisampleState;
-use vulkano::pipeline::graphics::rasterization::RasterizationState;
-use vulkano::pipeline::graphics::vertex_input::{Vertex, VertexDefinition};
-use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
-use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
-use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass};
+use vulkano::memory::allocator::{MemoryTypeFilter, StandardMemoryAllocator};
+use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass};
 use vulkano::swapchain::{PresentMode, Surface, Swapchain, SwapchainCreateInfo};
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 
 use crate::engine::context::config::Config;
-
-mod vs {
-    vulkano_shaders::shader!{
-        ty: "vertex",
-        src: r"
-            #version 460
-
-            layout(location = 0) in vec2 position;
-
-            void main() {
-                gl_Position = vec4(position, 0.0, 1.0);
-            }
-        ",
-    }
-}
-
-mod fs {
-    vulkano_shaders::shader!{
-        ty: "fragment",
-        src: "
-            #version 460
-
-            layout(location = 0) out vec4 f_color;
-
-            void main() {
-                f_color = vec4(1.0, 0.0, 0.0, 1.0);
-            }
-        ",
-    }
-}
-
-#[derive(BufferContents, Vertex)]
-#[repr(C)]
-pub struct MyVertex {
-    #[format(R32G32_SFLOAT)]
-    pub position: [f32; 2],
-}
 
 /// Main struct for rendering
 pub(super) struct Renderer {
@@ -70,11 +26,12 @@ pub(super) struct Renderer {
     pub(super) images: Vec<Arc<Image>>,
 
     pub(super) memory_alloc: Arc<StandardMemoryAllocator>,
-    pub(super) buffer_alloc: Arc<StandardCommandBufferAllocator>
+    pub(super) buffer_alloc: Arc<StandardCommandBufferAllocator>,
+    pub(super) descriptor_alloc: Arc<StandardDescriptorSetAllocator>
 }
 
 impl Renderer {
-    pub(super) fn new(window: Arc<Window>, event_loop: &EventLoop<()>) -> Arc<Self> {
+    pub(super) fn new(window: Arc<Window>, event_loop: &EventLoop<()>) -> Self {
         let instance = init_vulkan(event_loop);
 
         let extensions = DeviceExtensions {
@@ -98,26 +55,27 @@ impl Renderer {
 
         let buffer_alloc = Arc::new(StandardCommandBufferAllocator::new(
             device.clone(),
-            StandardCommandBufferAllocatorCreateInfo::default()
+            Default::default(),
         ));
 
-        Arc::new(Self {
+        let descriptor_alloc = Arc::new(StandardDescriptorSetAllocator::new(
+            device.clone(),
+            Default::default(),
+        ));
+
+        Self {
             swapchain,
             queue,
             images,
             window,
 
             memory_alloc,
-            buffer_alloc
-        })
+            buffer_alloc,
+            descriptor_alloc
+        }
     }
 
-    pub fn recreate_renderer(&self) -> Arc<Self> {
-        let window = self.window.clone();
-        let queue = self.queue.clone();
-        let memory_alloc = self.memory_alloc.clone();
-        let buffer_alloc = self.buffer_alloc.clone();
-
+    pub fn recreate_renderer(&mut self) {
         let image_extent: [u32; 2] = self.window.inner_size().into();
 
         let (new_swapchain, new_images) = self
@@ -129,82 +87,16 @@ impl Renderer {
             })
             .expect("failed to recreate swapchain");
 
-        Arc::new(
-            Self {
-                swapchain: new_swapchain,
-                queue,
-                images: new_images,
-                window,
-
-                memory_alloc,
-                buffer_alloc
-            }
-        )
+        self.swapchain = new_swapchain;
+        self.images = new_images;
     }
 
-    pub fn create_pipeline(&self, render_pass: Arc<RenderPass>) -> Arc<GraphicsPipeline> {
-        let device = self.queue.device();
-
-        let vs = vs::load(device.clone()).expect("failed to create shader module");
-        let fs = fs::load(device.clone()).expect("failed to create shader module");
-
-        let vertex_shader = vs.entry_point("main").unwrap();
-        let fragment_shader = fs.entry_point("main").unwrap();
-
-        let vertex_input_state = MyVertex::per_vertex()
-            .definition(&vertex_shader.info().input_interface)
-            .unwrap();
-
-        let stages = [
-            PipelineShaderStageCreateInfo::new(vertex_shader),
-            PipelineShaderStageCreateInfo::new(fragment_shader),
-        ];
-
-        let viewport = Viewport {
-            offset: [0.0, 0.0],
-            extent: self.window.inner_size().into(),
-            depth_range: 0.0..=1.0,
-        };
-
-        let layout = PipelineLayout::new(
-            device.clone(),
-            PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages)
-                .into_pipeline_layout_create_info(device.clone())
-                .unwrap(),
-        ).unwrap();
-
-        let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
-
-        GraphicsPipeline::new(
-            device.clone(),
-            None,
-            GraphicsPipelineCreateInfo {
-                stages: stages.into_iter().collect(),
-                vertex_input_state: Some(vertex_input_state),
-                viewport_state: Some(ViewportState {
-                    viewports: [viewport].into_iter().collect(),
-                    ..Default::default()
-                }),
-                input_assembly_state: Some(InputAssemblyState::default()),
-                rasterization_state: Some(RasterizationState::default()),
-                multisample_state: Some(MultisampleState::default()),
-                color_blend_state: Some(ColorBlendState::with_attachment_states(
-                    subpass.num_color_attachments(),
-                    ColorBlendAttachmentState::default(),
-                )),
-                // This graphics pipeline object concerns the first pass of the render pass.
-                subpass: Some(subpass.into()),
-                ..GraphicsPipelineCreateInfo::layout(layout)
-            },
-        ).unwrap()
-    }
-
-    pub fn frame_buffer(&self, image_index: usize) -> Arc<Framebuffer> {
+    pub fn frame_buffer(image: Arc<Image>, queue: Arc<Queue>, swapchain: Arc<Swapchain>) -> Arc<Framebuffer> {
         let render_pass = single_pass_renderpass!(
-            self.queue.device().clone(),
+            queue.device().clone(),
             attachments: {
                 color: {
-                    format: self.swapchain.image_format(),
+                    format: swapchain.image_format(),
                     samples: 1,
                     load_op: Clear,
                     store_op: Store,
@@ -216,7 +108,6 @@ impl Renderer {
             },
         ).expect("Render pass init error");
 
-        let image = self.images[image_index].clone();
         let view = ImageView::new_default(image).unwrap();
         Framebuffer::new(
             render_pass.clone(),
@@ -235,6 +126,12 @@ impl Renderer {
             .with_visible(false)
             .with_active(true);
 
+        let builder = match config.min_size.is_some() {
+            true => builder
+                .with_min_inner_size(config.min_size.unwrap()),
+            _ => builder
+        };
+
         Arc::new(
             builder.build(event_loop).unwrap()
         )
@@ -250,7 +147,7 @@ fn init_vulkan(event_loop: &EventLoop<()>) -> Arc<Instance> {
         InstanceCreateInfo {
             enabled_extensions: Surface::required_extensions(event_loop),
             ..Default::default()
-        }
+        },
     ).unwrap()
 }
 
@@ -281,7 +178,7 @@ fn fetch_phys_device(instance: Arc<Instance>, surface: &Arc<Surface>, extensions
 }
 
 fn create_graphics_queue(phys_device: Arc<PhysicalDevice>, queue_family_index: u32, extensions: &DeviceExtensions) -> Arc<Queue> {
-    let (device, mut queues) = Device::new(
+    let (_, mut queues) = Device::new(
         phys_device.clone(),
         DeviceCreateInfo {
             queue_create_infos: vec![QueueCreateInfo {
@@ -302,7 +199,7 @@ fn create_swapchain(physical_device: Arc<PhysicalDevice>, surface: &Arc<Surface>
         .expect("failed to get surface capabilities");
 
     let composite_alpha = caps.supported_composite_alpha.into_iter().next().unwrap();
-    let image_format =  physical_device
+    let image_format = physical_device
         .surface_formats(&surface, Default::default())
         .unwrap()[0]
         .0;

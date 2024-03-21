@@ -3,6 +3,8 @@ use winit::event_loop::EventLoop;
 use config::Config;
 use graphics::GraphicsContext;
 use input::InputContext;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 use time::TimeContext;
 
 mod input;
@@ -69,5 +71,11 @@ impl ContextBuilder {
         let graphics = GraphicsContext::new(&self.config, &event_loop);
 
         (Context { title, author, time, input, graphics }, event_loop)
+    }
+
+    pub fn save(&self) {
+        let data = json!(self.config);
+
+
     }
 }

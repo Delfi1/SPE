@@ -96,7 +96,7 @@ impl<Handler> Worker<Handler>
                 match event {
                     WindowEvent::CloseRequested => {
                         target.exit();
-                    },
+                    }
                     WindowEvent::Resized(..) | WindowEvent::ScaleFactorChanged { .. } => {
                         ctx.graphics.resized()
                     }
@@ -112,9 +112,8 @@ impl<Handler> Worker<Handler>
                         ..
                     } => {
                         let pos: [f64; 2] = position.into();
-                        //ctx.graphics.draw();
-                        println!("{:?}", pos)
-                    },
+                        //println!("{:?}", pos)
+                    }
                     WindowEvent::RedrawRequested => {
                         let acquired = match ctx.graphics.acquire() {
                             Ok(ac) => ac,
@@ -131,7 +130,8 @@ impl<Handler> Worker<Handler>
                         handler.on_update();
                         handler.on_draw();
 
-                        ctx.graphics.redraw(acquired);
+                        let init_time = ctx.time.init_time();
+                        ctx.graphics.redraw(acquired, init_time);
                     }
                     _ => ()
                 }

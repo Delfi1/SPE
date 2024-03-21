@@ -28,6 +28,10 @@ impl TimeContext {
         }
     }
 
+    pub fn init_time(&self) -> Duration {
+        self.init_time.elapsed()
+    }
+
     pub fn average_delta(&self) -> Duration {
         let sum: Duration = self.frames.iter().sum();
         let len = self.frames.len() as u32;

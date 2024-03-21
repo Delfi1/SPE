@@ -10,7 +10,7 @@ opt-level = 3
 # Graphics && Window handle
 vulkano = "*"
 vulkano-shaders = "*"
-winit = { version = "*", features = ["default", "rwh_05"] }
+winit = { version = "*", features = ["default", "rwh_05", "serde"] }
 tinyfiledialogs = "*"
 glam = "*"
 
@@ -19,4 +19,7 @@ self_update = {version = "*", features = ["default", "archive-tar"]}
 include_dir = "*"
 tempfile = "*"
 reqwest = "*"
-#once_cell = "*"
+
+# Files
+serde_json = "*"
+serde = { version = "*", features = ["derive"] }
