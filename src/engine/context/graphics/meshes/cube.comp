@@ -1,0 +1,16 @@
+#version 460
+
+layout (set = 0, binding) uniform Input {
+    vec2 resolution;
+    float time;
+} input;
+
+layout (set = 0, binding = 0) uniform Cube {
+    vec3 position;
+    vec3 rotation;
+    vec3 size;
+} cb;
+
+void main() {
+
+}

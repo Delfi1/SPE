@@ -1,51 +1,26 @@
-#![cfg_attr(
-    not(debug_assertions),
-    windows_subsystem = "windows"
-)]
+use engine::context::Context;
+use engine::EventHandler;
+
+use crate::engine::context::ContextBuilder;
 
 mod engine;
-mod updater;
-
-use engine::context::{Context, ContextBuilder};
-use engine::event;
-use engine::event::EventHandler;
-use engine::graphics::GraphicsContext;
 
 fn main() {
-    let (context, event_loop) =
-        ContextBuilder::new("Simple Physics Engine", "Delfi")
-            .build();
+    let (context, event_loop) = ContextBuilder::new("SPE", "Delfi")
+        .build();
 
-    updater::update().expect("Update error");
-
-    event::EventWorker::<Application>::new(context).run(event_loop);
+    let worker = engine::Worker::<Application>::new(context);
+    worker.run(event_loop);
 }
 
-pub struct Application {
-    text: String
-}
+pub struct Application {}
 
 impl EventHandler for Application {
-    fn create(_ctx: &mut Context) -> Self {
-        Self {
-            text: String::new()
-        }
-    }
-    
-    fn update(&mut self, _ctx: &Context) {
-
+    fn setup(_context: &mut Context) -> Self {
+        Self {}
     }
 
-    fn draw(&mut self, _gfx: &mut GraphicsContext) {
-
+    fn on_quit(&self) {
+        println!("Exit")
     }
-
-    fn char_input(&mut self, _ch: char) {
-        print!("{_ch}");
-    }
-
-    fn on_quit(&mut self) {
-
-    }
-
 }
