@@ -2,7 +2,6 @@ use vulkano::VulkanError;
 use winit::event::{Event, StartCause, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop, EventLoopWindowTarget};
 use winit::keyboard::KeyCode;
-use winit::platform::scancode::PhysicalKeyExtScancode;
 use winit::window::Fullscreen;
 
 use context::Context;
@@ -43,9 +42,15 @@ impl<Handler> Worker<Handler>
     }
 
     fn match_input(ctx: &mut Context, target: &EventLoopWindowTarget<()>) {
-        if ctx.input.is_key_pressed(KeyCode::ControlLeft) && ctx.input.is_key_just_pressed(KeyCode::KeyM) {
-            let window = ctx.graphics.window();
-            window.set_maximized(!window.is_maximized());
+        if ctx.input.is_key_pressed(KeyCode::ControlLeft) {
+            if ctx.input.is_key_just_pressed(KeyCode::KeyM) {
+                let window = ctx.graphics.window();
+                window.set_maximized(!window.is_maximized());
+            }
+
+            if ctx.input.is_key_just_pressed(KeyCode::KeyV) {
+                ctx.graphics.set_vsync(!ctx.graphics.is_vsync());
+            }
         }
 
         if ctx.input.is_key_just_pressed(KeyCode::F11) {
@@ -115,9 +120,12 @@ impl<Handler> Worker<Handler>
                         //println!("{:?}", pos)
                     }
                     WindowEvent::RedrawRequested => {
+                        ctx.time.tick();
+                        handler.on_update();
+
                         let acquired = match ctx.graphics.acquire() {
                             Ok(ac) => ac,
-                            Err(VulkanError::OutOfDate) => {
+                            Err(VulkanError::OutOfDate) | Err(VulkanError::NotReady) => {
                                 // If acquire is out of date -> continue && redraw;
                                 ctx.graphics.window().request_redraw();
                                 return;
@@ -125,9 +133,6 @@ impl<Handler> Worker<Handler>
                             Err(_e) => panic!("Acquire error")
                         };
 
-                        ctx.time.tick();
-
-                        handler.on_update();
                         handler.on_draw();
 
                         let init_time = ctx.time.init_time();

@@ -1,10 +1,10 @@
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 use winit::event_loop::EventLoop;
 
 use config::Config;
 use graphics::GraphicsContext;
 use input::InputContext;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
 use time::TimeContext;
 
 mod input;
@@ -75,7 +75,5 @@ impl ContextBuilder {
 
     pub fn save(&self) {
         let data = json!(self.config);
-
-
     }
 }
